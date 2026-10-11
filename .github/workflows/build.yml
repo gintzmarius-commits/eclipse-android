@@ -39,16 +39,13 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Android SDK and NDK
+      - name: Android SDK licences
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME" "$ANDROID_HOME/cmdline-tools" || true
           SDKM=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
-          echo "sdkmanager: $SDKM"
           yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-          NDK=$(grep -oP 'ndkVersion "\K[^"]+' moonlight/app/build.gradle)
-          SDK=$(grep -oP 'compileSdk \K[0-9]+' moonlight/app/build.gradle)
-          echo "NDK $NDK, SDK $SDK"
-          scripts/ci_run.sh "SDK Android" "$SDKM" --install "ndk;$NDK" "platforms;android-$SDK"
+          # Gradle downloads the exact platform and NDK Moonlight asks for.
+          AVAIL=$("$SDKM" --list 2>/dev/null | tr '\r' '\n' | grep -oE '(platforms;android-3[6-9][^ ]*|ndk;29[^ ]*)' | sort -u | tr '\n' ' ')
+          echo "::notice title=SDK disponibles::$AVAIL"
 
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v4
