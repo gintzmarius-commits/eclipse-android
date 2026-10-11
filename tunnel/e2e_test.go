@@ -86,8 +86,20 @@ func TestTailnetRelay(t *testing.T) {
 		}
 	}()
 
-	// The phone
-	if err := Start(filepath.Join(t.TempDir(), "phone"), "eclipse-test-phone"); err != nil {
+	// The phone, in the conditions of an Android app: no home, cache or
+	// temporary folder that Go knows of, working directory "/" (Eclipse
+	// 2.2.0 stopped there: "no safe place found to store log state").
+	phoneDir := filepath.Join(t.TempDir(), "phone")
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("STATE_DIRECTORY", "")
+	t.Setenv("TS_LOGS_DIR", "")
+	t.Setenv("TMPDIR", "/nonexistent-eclipse-tmp")
+	if wd, err := os.Getwd(); err == nil {
+		os.Chdir("/")
+		defer os.Chdir(wd)
+	}
+	if err := Start(phoneDir, "eclipse-test-phone"); err != nil {
 		t.Fatal(err)
 	}
 	var s status

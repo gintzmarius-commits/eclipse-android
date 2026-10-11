@@ -71,6 +71,23 @@ wait_alive() { # seconds, label
   note "OK toujours ouverte après $1 s ($2)"
 }
 launch() { adb shell am start -W -n "$ACT" > /dev/null 2>&1; }
+# back to Eclipse's home screen (closes sheets; reopens Eclipse if needed)
+home_screen() {
+  local i
+  for i in 1 2 3; do
+    dump home
+    screen_has home "Réglages" && ! screen_has home "Fermer" && ! screen_has home "Rescanner" && return 0
+    [ -z "$(alive)" ] && { launch; sleep 3; continue; }
+    adb shell input keyevent KEYCODE_BACK
+    sleep 1
+  done
+  [ -z "$(alive)" ] && launch
+  sleep 2
+}
+# crashes of Eclipse's own processes in a log file
+eclipse_crashes() {
+  grep -E "ANR in $PKG|pid [0-9]+ \((\.eclipse\.stream|[a-z.]*stream:tunnel)\)|GoLog.*(panic:|fatal error:)|Process: $PKG" "$@" 2>/dev/null | grep -v "test crash"
+}
 open_qr() { adb shell "am start -W -a android.intent.action.VIEW -d '$QR' $PKG" > /dev/null 2>&1; }
 
 adb wait-for-device
@@ -78,6 +95,18 @@ API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 note "Android $(adb shell getprop ro.build.version.release | tr -d '\r') (API $API), ABI $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 adb root > /dev/null 2>&1; sleep 3; adb wait-for-device
 adb shell settings put global package_verifier_enable 0 > /dev/null 2>&1
+# System "isn't responding" dialogs of other apps would cover the screen.
+adb shell settings put global hide_error_dialogs 1 > /dev/null 2>&1
+# A freshly started emulator is very busy for a while: let it settle.
+for i in $(seq 1 90); do
+  [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ] || { sleep 2; continue; }
+  load=$(adb shell cat /proc/loadavg | cut -d' ' -f1 | cut -d. -f1)
+  [ "${load:-99}" -lt 4 ] && break
+  sleep 2
+done
+note "système prêt (charge $(adb shell cat /proc/loadavg | cut -d' ' -f1))"
+adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1
+adb shell wm dismiss-keyguard > /dev/null 2>&1
 
 if [ -n "$ABI" ]; then
   adb install -r --abi "$ABI" "$APK" > "$OUT/install.txt" 2>&1
@@ -140,6 +169,7 @@ sleep 4
 launch
 wait_alive 8 "retour au premier plan"
 
+home_screen
 if tap "Réglages" && wait_text "Rapport technique" 10 && tap "Rapport technique"; then
   if wait_text "Tailscale intégré" 20; then
     shot 6-report
@@ -147,12 +177,14 @@ if tap "Réglages" && wait_text "Rapport technique" 10 && tap "Rapport technique
   else
     fail "rapport technique vide"
   fi
-  adb shell input keyevent KEYCODE_BACK
 fi
+home_screen
 wait_alive 3 "réglages"
 
 PART1_LINES=$(wc -l < "$OUT/logcat.txt")
-if head -n "$PART1_LINES" "$OUT/logcat.txt" | grep -E "FATAL EXCEPTION|Fatal signal|ANR in $PKG|panic:|fatal error:" | grep -v "test crash" > "$OUT/part1-crashes.txt"; then
+adb logcat -b crash -d > "$OUT/crash-part1.txt" 2>&1
+head -n "$PART1_LINES" "$OUT/logcat.txt" > "$OUT/logcat-part1.txt"
+if eclipse_crashes "$OUT/logcat-part1.txt" "$OUT/crash-part1.txt" > "$OUT/part1-crashes.txt"; then
   fail "plantage pendant l'utilisation normale : $(head -1 "$OUT/part1-crashes.txt")"
 else
   note "OK aucun plantage pendant l'utilisation normale"
@@ -174,14 +206,13 @@ if [ $TUNNEL = 1 ]; then
   note "le moteur s'est arrêté $DEATHS fois"
   [ "$DEATHS" -ge 1 ] || fail "la panne volontaire n'a pas eu lieu"
   shot 7-after-crashes
-  adb shell input keyevent KEYCODE_BACK
-  sleep 1
+  home_screen
   if tap "Réglages" && wait_text "Rapport technique" 10 && tap "Rapport technique"; then
     if wait_text "test crash" 20; then note "OK la panne est dans le rapport technique"
     else fail "la panne n'apparaît pas dans le rapport technique"; fi
     shot 8-report
-    adb shell input keyevent KEYCODE_BACK
   fi
+  home_screen
   if tap "Réglages" && wait_text "Jouer hors de chez toi" 10 && tap "Jouer hors de chez toi"; then
     if wait_text "ne fonctionne pas sur ce téléphone" 10; then note "OK Eclipse explique que le Tailscale intégré est arrêté"
     else fail "pas d'explication après les pannes"; fi

@@ -44,6 +44,17 @@ func init() {
 	netmon.RegisterInterfaceGetter(androidInterfaces)
 }
 
+// writable reports whether files can be created in dir.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".eclipse-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
+}
+
 // SetCrashFile makes the Go runtime write the report of a fatal error to
 // this file (shown by Eclipse after a crash of the network engine).
 func SetCrashFile(path string) (err error) {
@@ -78,6 +89,18 @@ func Start(dir, hostname string) (err error) {
 	envknob.Setenv("TS_NO_LOGS_NO_SUPPORT", "true")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
+	}
+	// An Android app has no home, cache or temporary folder that Go knows
+	// of: Tailscale would stop the whole app ("no safe place found to store
+	// log state", Eclipse 2.2.0). Give it folders inside the app's own.
+	for env, sub := range map[string]string{"TS_LOGS_DIR": "logs", "TMPDIR": "tmp", "HOME": "home"} {
+		d := filepath.Join(dir, sub)
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			return err
+		}
+		if env == "TS_LOGS_DIR" || os.Getenv(env) == "" || !writable(os.Getenv(env)) {
+			os.Setenv(env, d)
+		}
 	}
 	control := controlURL
 	// Tests on an emulator point the app to a local test network (this
