@@ -70,19 +70,27 @@ wait_alive() { # seconds, label
   done
   note "OK toujours ouverte après $1 s ($2)"
 }
-launch() { adb shell am start -W -n "$ACT" > /dev/null 2>&1; }
-# back to Eclipse's home screen (closes sheets; reopens Eclipse if needed)
-home_screen() {
-  local i
-  for i in 1 2 3; do
-    dump home
-    screen_has home "Réglages" && ! screen_has home "Fermer" && ! screen_has home "Rescanner" && return 0
-    [ -z "$(alive)" ] && { launch; sleep 3; continue; }
-    adb shell input keyevent KEYCODE_BACK
-    sleep 1
+# launch: opens Eclipse like the icon does (tries again if Android
+# does not start it: seen on Android 8 emulators right after a force-stop)
+launch() {
+  local try i
+  for try in 1 2 3; do
+    adb shell am start -W -n "$ACT" > /dev/null 2>&1
+    for i in $(seq 1 8); do
+      [ -n "$(pid_of $PKG)" ] && return 0
+      sleep 1
+    done
+    adb shell input keyevent KEYCODE_HOME
+    sleep 2
   done
-  [ -z "$(alive)" ] && launch
-  sleep 2
+  return 1
+}
+# back to Eclipse's home screen, nothing open over it
+home_screen() {
+  adb shell am force-stop "$PKG"
+  sleep 1
+  launch
+  sleep 3
 }
 # crashes of Eclipse's own processes in a log file
 eclipse_crashes() {
