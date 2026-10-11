@@ -1,11 +1,8 @@
-**Eclipse pour Android 2.1.1**
+**Eclipse pour Android 2.2.0** : Tailscale est intégré à Eclipse.
 
-- Quand le PC n'est pas trouvé, Eclipse dit maintenant pourquoi : téléphone pas sur le Wi-Fi de la maison, Tailscale pas activé, ou jeu à distance pas encore activé sur le PC. Un bouton ouvre Tailscale quand c'est lui qui manque.
+- **Plus besoin de l'appli Tailscale ni de VPN** : Eclipse rejoint lui-même ton réseau privé Tailscale et retrouve ton PC partout, même en 4G.
+- Connecte-toi une seule fois (Réglages → Jouer hors de chez toi → Se connecter), avec le même compte que sur le PC.
+- Scanne une fois le QR code d'Eclipse à la maison : ensuite, en 4G, ton PC apparaît en ligne tout seul.
+- Quand le PC n'est pas trouvé, Eclipse dit pourquoi et propose la bonne action.
 
-Rappel 2.1.0 : joue à ton PC depuis n'importe où, même en 4G.
-
-- **Jouer hors de chez toi** avec Tailscale (gratuit) : sur le PC, Eclipse 2.1 installe et règle Tailscale tout seul. Sur le téléphone, installe l'appli Tailscale et connecte-toi avec le même compte (Google, par exemple).
-- Scanne une fois le QR code d'Eclipse à la maison : le téléphone retient l'adresse du PC pour la maison **et** pour l'extérieur, et choisit tout seul la bonne.
-- Quand le PC est hors ligne, un bouton « Tailscale » t'aide à l'activer.
-
-Il faut **Eclipse 2.1 sur le PC** (Windows ou Ubuntu). Installe **Eclipse.apk** ci-dessous, par-dessus la version précédente : tes PC restent connectés.
+Il faut **Eclipse 2.1 ou plus récent sur le PC**, avec « Jouer hors de chez toi » activé. Installe **Eclipse.apk** ci-dessous, par-dessus la version précédente.

@@ -27,7 +27,10 @@ let current = null;    // uuid of the PC whose games are shown
 let games = {};        // uuid -> {apps, running, error}
 let pairing = null;    // {uuid, name} while a pairing runs
 let menuPc = null;
-let ts = { installed: false, vpn: false }; // Tailscale on this phone
+let ts = { installed: false, vpn: false }; // Tailscale app on this phone
+let tun = { available: false }; // Tailscale built into Eclipse
+let tunLoginAsked = false;
+const tunOn = () => tun.available && tun.state === "running";
 
 const byUuid = (u) => pcs.find((p) => p.uuid === u);
 const stateOf = (p) => (p.state === "ONLINE" ? "online" : p.state === "OFFLINE" ? "offline" : "wait");
@@ -104,6 +107,16 @@ const handlers = {
   qr(ev) {
     qrEvent(ev);
   },
+  tunnel(ev) {
+    const was = JSON.stringify(tun);
+    tun = ev;
+    if (tunOn()) tunLoginAsked = false;
+    if (was !== JSON.stringify(tun)) {
+      renderPcs();
+      if (!$("#s-remote").hidden) renderRemote();
+      setRemoteSub();
+    }
+  },
   tailscale(ev) {
     const changed = ev.installed !== ts.installed || ev.vpn !== ts.vpn;
     ts = ev;
@@ -112,7 +125,7 @@ const handlers = {
       if (current) renderGamesHeader();
       if (!$("#s-remote").hidden) renderRemote();
     }
-    $("#set-remote-sub").textContent = !ts.installed ? "Avec Tailscale, même en 4G" : ts.vpn ? "Tailscale est actif" : "Tailscale est installé, pas actif";
+    setRemoteSub();
   },
 };
 
@@ -135,7 +148,7 @@ function renderPcs() {
       let action = icon("i-chev", "chev");
       if (st === "online" && !p.paired) action = `<button class="btn primary pill-sm" data-pair="${esc(p.uuid)}">Connecter</button>`;
       if (st === "offline" && p.canWake) action = `<button class="btn pill-sm" data-wake="${esc(p.uuid)}">${icon("i-power")}Allumer</button>`;
-      if (st === "offline" && p.remote && !ts.vpn) action = `<button class="btn pill-sm" data-remote="${esc(p.uuid)}">${icon("i-globe")}Tailscale</button>`;
+      if (st === "offline" && p.remote && (tun.available ? !tunOn() : !ts.vpn)) action = `<button class="btn pill-sm" data-remote="${esc(p.uuid)}">${icon("i-globe")}${tun.available ? "Connexion" : "Tailscale"}</button>`;
       return `<li class="pc" data-open="${esc(p.uuid)}">
         <div class="tile">${icon("i-desktop")}</div>
         <div class="txt"><strong>${esc(p.name)}</strong><span>${statusText(p)}${p.address ? " · " + esc(p.address) : ""}</span></div>
@@ -339,10 +352,15 @@ function qrEvent(ev) {
       qrStep("q-done");
       openSheet("s-qr");
       qrDoneUuid = ev.uuid;
-      if (ev.remote && !ev.tailscale) {
+      if (ev.remote && (ev.tunnel ? ev.tunnelState !== "running" : !ev.tailscale)) {
         // Away from home needs Tailscale: say it now, while at home.
         $("#q-remote").hidden = false;
-        $("#q-remote .q-account").textContent = ev.account || "le même compte que sur le PC";
+        const acct = `<b>${esc(ev.account || "le même compte que sur le PC")}</b>`;
+        $("#q-remote p").innerHTML = ev.tunnel
+          ? `Connecte Eclipse à Tailscale, une seule fois, avec ${acct}. Pas besoin de l'appli Tailscale.`
+          : `Installe <b>Tailscale</b> (gratuit) et connecte-toi avec ${acct}.`;
+        $("#q-ts").textContent = ev.tunnel ? "Se connecter à Tailscale" : "Installer Tailscale";
+        $("#q-ts").dataset.tunnel = ev.tunnel ? "1" : "";
         $("#q-later").onclick = () => {
           closeSheet("s-qr", true);
           if (ev.uuid) openGames(ev.uuid);
@@ -359,8 +377,9 @@ function qrEvent(ev) {
     case "error":
       stopQrHint();
       $("#q-err").textContent = ev.error || "La connexion a échoué.";
-      $("#q-fix").hidden = ev.fix !== "tailscale";
-      $("#q-fix").lastChild.textContent = ev.installed === false ? "Installer Tailscale" : "Ouvrir Tailscale";
+      $("#q-fix").hidden = ev.fix !== "tailscale" && ev.fix !== "tunnel";
+      $("#q-fix").dataset.fix = ev.fix || "";
+      $("#q-fix").lastChild.textContent = ev.fix === "tunnel" ? "Connexion Tailscale" : ev.installed === false ? "Installer Tailscale" : "Ouvrir Tailscale";
       qrStep("q-fail");
       openSheet("s-qr");
       return;
@@ -384,6 +403,37 @@ function renderRemote() {
   const account = p && p.account ? p.account : "";
   const acc = account ? `<b>${esc(account)}</b>` : "le même compte que sur le PC";
   let steps = [];
+  $("#r-out").hidden = true;
+  $("#r-go").disabled = false;
+  if (tun.available) {
+    const st = tun.state || "stopped";
+    if (st === "running") {
+      $("#r-text").textContent = "Eclipse est connecté à Tailscale : tes PC sont joignables partout, même en 4G.";
+      steps = [`Compte : <b>${esc(tun.account || "?")}</b>`];
+      if (account && tun.account && account.toLowerCase() !== tun.account.toLowerCase()) {
+        steps.push(`<span class="warn">Ton PC utilise un autre compte (<b>${esc(account)}</b>) : déconnecte-toi puis reconnecte-toi avec celui-là.</span>`);
+      }
+      if (!p) steps.push("Scanne une fois le QR code d'Eclipse sur ton PC, à la maison.");
+      $("#r-go").textContent = "C'est bon";
+      $("#r-out").hidden = false;
+    } else if (st === "starting" || (tunLoginAsked && !tun.error)) {
+      $("#r-text").innerHTML = tunLoginAsked && st !== "starting"
+        ? "La page de connexion Tailscale s'ouvre dans le navigateur. Connecte-toi, puis reviens ici."
+        : `<span class="spin"></span>Connexion au réseau privé…`;
+      $("#r-go").textContent = "Rouvrir la page de connexion";
+      $("#r-go").disabled = st === "starting";
+    } else if (st === "approval") {
+      $("#r-text").textContent = "Ce téléphone attend d'être approuvé dans la console Tailscale (login.tailscale.com).";
+      $("#r-go").textContent = "Réessayer";
+    } else {
+      $("#r-text").textContent = tun.error ? tun.error : "Eclipse a Tailscale intégré : pas besoin d'installer l'appli Tailscale. Il suffit de te connecter, une seule fois.";
+      steps = ["Touche <b>Se connecter</b> : la page Tailscale s'ouvre.", `Connecte-toi avec ${acc} (par exemple « Sign in with Google »).`, "Reviens dans Eclipse : ton PC devient joignable partout."];
+      $("#r-go").textContent = "Se connecter";
+    }
+    $("#r-steps").innerHTML = steps.map((s) => `<li>${s}</li>`).join("");
+    $("#r-foot").textContent = st === "running" && tun.ip ? "Adresse de ce téléphone dans le réseau privé : " + tun.ip : "";
+    return;
+  }
   if (!p) {
     $("#r-text").textContent = "Avec Tailscale (gratuit), ton téléphone retrouve ton PC partout, même en 4G.";
     steps = ["Sur le PC, dans Eclipse, active <b>Jouer hors de chez toi</b>.", "Sur ce téléphone, installe <b>Tailscale</b> et connecte-toi avec le même compte.", "À la maison, scanne une fois le QR code d'Eclipse."];
@@ -402,9 +452,43 @@ function renderRemote() {
   $("#r-foot").textContent = ts.installed && !ts.vpn ? "Astuce : laisse Tailscale activé, il consomme très peu de batterie." : "";
 }
 
-$("#r-go").onclick = () => N.openTailscale();
-$("#q-ts").onclick = () => N.openTailscale();
-$("#q-fix").onclick = () => N.openTailscale();
+function setRemoteSub() {
+  $("#set-remote-sub").textContent = tun.available
+    ? (tunOn() ? "Connecté à Tailscale" + (tun.account ? " · " + tun.account : "") : "Tailscale intégré, pas encore connecté")
+    : !ts.installed ? "Avec Tailscale, même en 4G" : ts.vpn ? "Tailscale est actif" : "Tailscale est installé, pas actif";
+}
+
+function tunnelLogin() {
+  tunLoginAsked = true;
+  N.tunnelLogin();
+  if (!$("#s-remote").hidden) renderRemote();
+}
+
+$("#r-go").onclick = () => {
+  if (!tun.available) return N.openTailscale();
+  if (tunOn()) return closeSheet("s-remote");
+  tunnelLogin();
+};
+$("#r-out").onclick = () => {
+  if (confirm("Déconnecter Eclipse de ce compte Tailscale ? Ton PC ne sera plus joignable hors de chez toi.")) N.tunnelLogout();
+};
+$("#q-ts").onclick = () => {
+  if ($("#q-ts").dataset.tunnel) {
+    closeSheet("s-qr", true);
+    openRemote(qrDoneUuid);
+    return tunnelLogin();
+  }
+  N.openTailscale();
+};
+$("#q-fix").onclick = () => {
+  if ($("#q-fix").dataset.fix === "tunnel") {
+    closeSheet("s-qr", true);
+    openRemote(null);
+    if (!tunOn()) tunnelLogin();
+    return;
+  }
+  N.openTailscale();
+};
 $("#set-remote").onclick = () => {
   closeSheet("s-settings");
   openRemote(null);
@@ -524,10 +608,18 @@ function demoNative() {
       later(() => window.ec.on("qr", { stage: "pair", name: "PC-SALON", uuid: "b" }), 1500);
       later(() => window.ec.on("qr", fail
         ? { stage: "error", name: "PC-SALON", error: "Ce QR code n'est plus valable. Rescanne le QR code affiché sur le PC." }
-        : { stage: "done", name: "PC-SALON", uuid: "b", remote: true, account: "marius@gmail.com", tailscale: false }), 3500);
+        : { stage: "done", name: "PC-SALON", uuid: "b", remote: true, account: "marius@gmail.com", tailscale: false, tunnel: true, tunnelState: window.__tun || "needslogin" }), 3500);
     },
     openTailscale: () => toast("Ouverture de Tailscale…"),
-    tailscale: () => later(() => window.ec.on("tailscale", { installed: location.search.includes("ts"), vpn: false }), 100),
+    tailscale: () => {
+      later(() => window.ec.on("tailscale", { installed: location.search.includes("ts"), vpn: false }), 100);
+      later(() => window.ec.on("tunnel", { available: !location.search.includes("notun"), state: window.__tun || "needslogin" }), 150);
+    },
+    tunnelLogin: () => {
+      later(() => window.ec.on("tunnel", { available: true, state: "needslogin", authUrl: "https://login.tailscale.com/a/x" }), 300);
+      later(() => { window.__tun = "running"; window.ec.on("tunnel", { available: true, state: "running", ip: "100.88.1.2", account: "marius@gmail.com" }); }, 2500);
+    },
+    tunnelLogout: () => later(() => { window.__tun = "needslogin"; window.ec.on("tunnel", { available: true, state: "needslogin" }); }, 300),
     cancelPairing: () => {},
     addComputer: () => later(() => window.ec.on("added", { ok: false, error: "Aucun PC ne répond à cette adresse." }), 900),
     play: () => toast("Lancement…"), quit: () => toast("Jeu quitté"), wake: () => toast("Réveil envoyé"),

@@ -137,6 +137,8 @@ svg { width: 22px; height: 22px; flex: none; }
 .r-steps { margin: 0; padding-left: 22px; text-align: left; display: grid; gap: 6px; color: var(--text); font-size: 15px; align-self: stretch; }
 .r-steps:empty { display: none; }
 .r-steps b { color: var(--accent-text); }
+.r-steps .warn { color: var(--err); }
+#r-text .spin { margin-right: 6px; }
 .btn.pill-sm svg { width: 16px; height: 16px; }
 
 /* games */

@@ -78,6 +78,8 @@ android {
 dependencies {
     implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
     implementation 'com.google.android.gms:play-services-base:18.5.0'
+    // Built-in Tailscale (tunnel/, built by scripts/build_tunnel.sh)
+    implementation files('libs/eclipsenet.aar')
 }
 '''
     return t
@@ -163,6 +165,17 @@ edit(pm, lambda t: must_sub(
         }
 """, t, count=1))
 
+#     Through Eclipse's built-in Tailscale, the PC is reached on 127.0.0.1:
+#     stream it as a remote PC (smaller packets, fit for the tunnel).
+nvc = app / "src/main/java/com/limelight/nvstream/NvConnection.java"
+edit(nvc, lambda t: must_sub(
+    r'(    private int detectServerConnectionType\(\) \{\n)',
+    r"""\1        // Eclipse: its built-in Tailscale relays the PC on 127.0.0.1 (remote play)
+        if (context.serverAddress != null && context.serverAddress.address.startsWith("127.")) {
+            return StreamConfiguration.STREAM_CFG_REMOTE;
+        }
+""", t, count=1))
+
 # 5) The Eclipse screen opens the app; Moonlight's screen stays reachable
 #    from Eclipse's settings ("Interface Moonlight classique").
 ECLIPSE_ACTIVITY = """<activity
@@ -231,6 +244,10 @@ edit(app / "proguard-rules.pro", lambda t: t + """
 -keep class com.google.android.gms.internal.mlkit_** { *; }
 -keep class com.google.android.gms.common.moduleinstall.** { *; }
 -keep class com.google.android.datatransport.** { *; }
+
+# Eclipse: built-in Tailscale (Go library, called through JNI)
+-keep class go.** { *; }
+-keep class eclipsenet.** { *; }
 """)
 
 print("Eclipse changes applied.")

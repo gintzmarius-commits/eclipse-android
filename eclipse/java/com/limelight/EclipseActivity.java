@@ -203,6 +203,7 @@ public class EclipseActivity extends Activity {
                 pushInsets();
                 pushComputers();
                 runPendingQr();
+                tunnelLast = "";
             }
         });
         web.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -262,6 +263,8 @@ public class EclipseActivity extends Activity {
         startUpdates();
         emit("resume", "{}");
         emitTailscale();
+        tunnelLast = "";
+        tunnelWatch();
     }
 
     @Override
@@ -404,14 +407,184 @@ public class EclipseActivity extends Activity {
      */
     private void applyRemote(ComputerDetails d) {
         ComputerDetails.AddressTuple r = storedRemote(d.uuid);
+        if (r != null && EclipseTunnel.available()) {
+            // Eclipse's own Tailscale relays the PC on this phone.
+            r = new ComputerDetails.AddressTuple(EclipseTunnel.LOCAL, r.port);
+        }
         if (r != null && (d.manualAddress == null || !r.address.equals(d.manualAddress.address) || r.port != d.manualAddress.port)) {
             d.manualAddress = r;
+        }
+    }
+
+    // ---- built-in Tailscale ----
+
+    private final Object tunnelLock = new Object();
+    private volatile String tunnelLast = "";
+    private volatile boolean tunnelWatching;
+
+    /** The PC whose Tailscale address is relayed (the last one scanned). */
+    private ComputerDetails.AddressTuple tunnelTarget() {
+        String uuid = prefs().getString("remote_last", null);
+        ComputerDetails.AddressTuple t = storedRemote(uuid);
+        if (t != null) return t;
+        for (String k : prefs().getAll().keySet()) {
+            if (k.startsWith("remote:")) {
+                t = storedRemote(k.substring(7));
+                if (t != null) return t;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasRemote() {
+        for (String k : prefs().getAll().keySet()) {
+            if (k.startsWith("remote:")) return true;
+        }
+        return false;
+    }
+
+    /** Starts the built-in Tailscale (background thread). */
+    private void tunnelStart() {
+        if (!EclipseTunnel.available()) return;
+        synchronized (tunnelLock) {
+            try {
+                EclipseTunnel.start(this);
+            } catch (Exception e) {
+                LimeLog.warning("Eclipse: tunnel start: " + e);
+            }
+        }
+        tunnelSync();
+    }
+
+    /** Relays the PC once connected, and tells the page. */
+    private void tunnelSync() {
+        if (!EclipseTunnel.available()) return;
+        JSONObject st = EclipseTunnel.status();
+        String state = st.optString("state");
+        if ("running".equals(state)) {
+            ComputerDetails.AddressTuple t = tunnelTarget();
+            if (t != null) {
+                try {
+                    EclipseTunnel.forward(t.address, t.port);
+                } catch (Exception e) {
+                    try {
+                        st.put("error", "Relais impossible : " + e.getMessage());
+                    } catch (JSONException ignored) {
+                    }
+                }
+            }
+        }
+        try {
+            st.put("available", true);
+        } catch (JSONException ignored) {
+        }
+        String s = st.toString();
+        if (!s.equals(tunnelLast)) {
+            boolean nowRunning = "running".equals(state) && !tunnelLast.contains("\"state\":\"running\"");
+            tunnelLast = s;
+            emit("tunnel", s);
+            if (nowRunning && managerBinder != null) {
+                // Reach remote PCs through the relay at once.
+                for (ComputerDetails c : computers.values()) {
+                    if (storedRemote(c.uuid) != null) managerBinder.invalidateStateForComputer(c.uuid);
+                }
+            }
+        }
+    }
+
+    /** Keeps the page informed while Eclipse is on screen. */
+    private void tunnelWatch() {
+        if (!EclipseTunnel.available() || tunnelWatching) return;
+        tunnelWatching = true;
+        new Thread() {
+            @Override
+            public void run() {
+                boolean started = false;
+                while (inForeground && !isFinishing()) {
+                    if (!started && (hasRemote() || !"stopped".equals(EclipseTunnel.state()))) {
+                        tunnelStart();
+                        started = true;
+                    } else if (started) {
+                        tunnelSync();
+                    }
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                }
+                tunnelWatching = false;
+            }
+        }.start();
+    }
+
+    /** Sign-in with the Tailscale account (once): opens the page in the browser. */
+    private void tunnelLogin() {
+        new Thread() {
+            @Override
+            public void run() {
+                try {
+                    synchronized (tunnelLock) {
+                        EclipseTunnel.start(EclipseActivity.this);
+                    }
+                    String url = "";
+                    for (int i = 0; i < 40 && url.isEmpty(); i++) {
+                        JSONObject st = EclipseTunnel.status();
+                        if ("running".equals(st.optString("state"))) {
+                            tunnelSync();
+                            return;
+                        }
+                        url = st.optString("authUrl", "");
+                        if (url.isEmpty()) {
+                            if (i == 0 || i == 10) {
+                                try {
+                                    EclipseTunnel.login();
+                                } catch (Exception e) {
+                                    LimeLog.warning("Eclipse: tunnel login: " + e);
+                                }
+                            }
+                            Thread.sleep(500);
+                        }
+                    }
+                    if (url.isEmpty()) {
+                        emitTunnelError("La page de connexion Tailscale ne vient pas. Vérifie la connexion internet du téléphone. "
+                                + EclipseTunnel.lastLog());
+                        return;
+                    }
+                    final String u = url;
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u)));
+                            } catch (Exception e) {
+                                Toast.makeText(EclipseActivity.this, "Ouvre cette page : " + u, Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    });
+                    tunnelWatch();
+                } catch (Exception e) {
+                    emitTunnelError("Connexion à Tailscale impossible : " + e.getMessage());
+                }
+            }
+        }.start();
+    }
+
+    private void emitTunnelError(String msg) {
+        try {
+            JSONObject o = EclipseTunnel.status();
+            o.put("available", true);
+            o.put("error", msg);
+            tunnelLast = "";
+            emit("tunnel", o.toString());
+        } catch (JSONException ignored) {
         }
     }
 
     private void saveRemote(ComputerDetails target, EclipseQr q) {
         if (q.remote.isEmpty()) return;
         prefs().edit()
+                .putString("remote_last", target.uuid)
                 .putString("remote:" + target.uuid, q.remote + "|" + q.port)
                 .putString("account:" + target.uuid, q.remoteAccount)
                 .apply();
@@ -762,6 +935,16 @@ public class EclipseActivity extends Activity {
                     if (vpnActive()) order.add(0, q.remote);
                     else order.add(q.remote);
                 }
+                // Built-in Tailscale already connected: reach the PC through it.
+                if (!q.remote.isEmpty() && EclipseTunnel.available() && "running".equals(EclipseTunnel.state())) {
+                    try {
+                        EclipseTunnel.forward(q.remote, q.port);
+                        if (onWifi()) order.add(EclipseTunnel.LOCAL);
+                        else order.add(0, EclipseTunnel.LOCAL);
+                    } catch (Exception e) {
+                        LimeLog.warning("Eclipse: relay: " + e);
+                    }
+                }
                 for (String addr : order) {
                     if (superseded(job)) return;
                     ComputerDetails d = new ComputerDetails();
@@ -917,6 +1100,15 @@ public class EclipseActivity extends Activity {
         boolean vpn = vpnActive();
         if (otherPc) {
             msg = "Un autre PC répond à l'adresse de ce QR code. Rescanne le code affiché sur " + name + ".";
+        } else if (!q.remote.isEmpty() && EclipseTunnel.available() && !"running".equals(EclipseTunnel.state())) {
+            msg = "Ton téléphone n'est pas sur le Wi-Fi de " + name + ". Pour le joindre de loin, connecte Eclipse à Tailscale"
+                    + (q.remoteAccount.isEmpty() ? "" : " avec le compte " + q.remoteAccount) + " (une seule fois), puis rescanne le QR code.";
+            fix = "tunnel";
+        } else if (!q.remote.isEmpty() && EclipseTunnel.available()) {
+            msg = "Eclipse est connecté à Tailscale, mais " + name + " ne répond pas. Vérifie que le PC est allumé, que «\u00a0Jouer hors de chez toi\u00a0» "
+                    + "est activé dans Eclipse sur le PC, et que les deux utilisent le même compte"
+                    + (q.remoteAccount.isEmpty() ? "" : " (" + q.remoteAccount + ")") + ".";
+            fix = "tunnel";
         } else if (!q.remote.isEmpty() && !vpn) {
             msg = "Ton téléphone n'est pas sur le Wi-Fi de " + name + ". Pour le joindre de loin, active Tailscale sur ce téléphone"
                     + (q.remoteAccount.isEmpty() ? "" : " (compte " + q.remoteAccount + ")") + ", puis rescanne le QR code.";
@@ -974,6 +1166,8 @@ public class EclipseActivity extends Activity {
                 ev.put("remote", true);
                 ev.put("account", q.remoteAccount);
                 ev.put("tailscale", tailscaleInstalled());
+                ev.put("tunnel", EclipseTunnel.available());
+                ev.put("tunnelState", EclipseTunnel.available() ? EclipseTunnel.state() : "");
             }
             emit("qr", ev.toString());
         } catch (JSONException ignored) {
@@ -1232,6 +1426,39 @@ public class EclipseActivity extends Activity {
         @JavascriptInterface
         public void tailscale() {
             emitTailscale();
+            tunnelLast = "";
+            if (EclipseTunnel.available()) {
+                new Thread() {
+                    @Override
+                    public void run() {
+                        tunnelSync();
+                    }
+                }.start();
+            } else {
+                emit("tunnel", "{\"available\":false}");
+            }
+        }
+
+        /** Built-in Tailscale: sign in (opens the browser). */
+        @JavascriptInterface
+        public void tunnelLogin() {
+            EclipseActivity.this.tunnelLogin();
+        }
+
+        @JavascriptInterface
+        public void tunnelLogout() {
+            new Thread() {
+                @Override
+                public void run() {
+                    try {
+                        EclipseTunnel.logout();
+                    } catch (Exception e) {
+                        LimeLog.warning("Eclipse: logout: " + e);
+                    }
+                    tunnelLast = "";
+                    tunnelSync();
+                }
+            }.start();
         }
 
         @JavascriptInterface

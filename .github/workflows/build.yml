@@ -53,6 +53,15 @@ jobs:
           AVAIL=$("$SDKM" --list 2>/dev/null | tr '\r' '\n' | grep -oE '(platforms;android-3[6-9][^ ]*|ndk;29[^ ]*)' | sort -u | tr '\n' ' ')
           echo "::notice title=SDK disponibles::$AVAIL"
 
+      - name: Go (for the built-in Tailscale)
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.x"
+          cache: false
+
+      - name: Built-in Tailscale (Go library for Android)
+        run: scripts/ci_run.sh "Tailscale intégré" scripts/build_tunnel.sh moonlight/app/libs
+
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
