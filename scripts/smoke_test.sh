@@ -258,8 +258,8 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   else fail "le téléphone n'a pas joint le PC par Tailscale"; fi
   wait_alive 5 "connexion par Tailscale"
   shot 10-tailnet-qr
-  # The relay of this PC listens on 127.0.0.2:47989 (0200007F:BB55 in /proc).
-  if adb shell cat /proc/net/tcp | grep -qi "0200007F:BB55 00000000:0000 0A"; then note "OK relais du PC sur 127.0.0.2"
+  # The relay of this PC listens on 127.0.0.2:47989 (0200007F:BB75 in /proc).
+  if adb shell cat /proc/net/tcp | grep -qi "0200007F:BB75 00000000:0000 0A"; then note "OK relais du PC sur 127.0.0.2"
   else fail "pas de relais sur 127.0.0.2"; fi
   home_screen
   if wait_text "Lenovo 500w Gen 5" 30; then note "OK le PC trouvé par Tailscale est dans la liste"
