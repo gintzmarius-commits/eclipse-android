@@ -24,6 +24,9 @@ import (
 	"tailscale.com/tsnet"
 )
 
+// controlURL is the coordination server (tests use a local one).
+var controlURL string
+
 var (
 	mu       sync.Mutex
 	srv      *tsnet.Server
@@ -59,10 +62,11 @@ func Start(dir, hostname string) error {
 		log.Print("eclipsenet: " + s)
 	}
 	srv = &tsnet.Server{
-		Dir:      filepath.Clean(dir),
-		Hostname: hostname,
-		Logf:     logf,
-		UserLogf: logf,
+		Dir:        filepath.Clean(dir),
+		Hostname:   hostname,
+		ControlURL: controlURL,
+		Logf:       logf,
+		UserLogf:   logf,
 	}
 	startErr = srv.Start()
 	return startErr

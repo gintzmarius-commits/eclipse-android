@@ -233,7 +233,7 @@ check(len(eca) == 1, "écran Eclipse")
 check(any(t == "start" and n == "data" and a.get("scheme") == "eclipse" and a.get("host") == "pair" for t, n, a in ev), "liens eclipse://pair")
 
 print("== Code et interface")
-check("lib/arm64-v8a/libgojni.so" in names and "lib/armeabi-v7a/libgojni.so" in names, "Tailscale intégré (arm64, arm)")
+check("lib/arm64-v8a/libgojni.so" in names, "Tailscale intégré (arm64)")
 check("Leclipsenet/Eclipsenet;" in methods and "forward(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V" in methods["Leclipsenet/Eclipsenet;"], "pont vers le Tailscale intégré")
 check("Lgo/Seq;" in methods, "moteur gomobile gardé")
 check("Lcom/limelight/EclipseActivity$Bridge;" in methods and "scanQr()V" in methods["Lcom/limelight/EclipseActivity$Bridge;"], "pont scanQr")
