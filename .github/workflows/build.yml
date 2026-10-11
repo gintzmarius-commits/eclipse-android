@@ -1,0 +1,77 @@
+name: Build Eclipse APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Eclipse sources
+        uses: actions/checkout@v4
+
+      - name: Moonlight sources (commit from upstream.txt)
+        run: |
+          git init -q moonlight
+          cd moonlight
+          git remote add origin https://github.com/moonlight-stream/moonlight-android
+          git fetch -q --depth 1 origin "$(cat ../upstream.txt)"
+          git checkout -q FETCH_HEAD
+          git submodule update -q --init --recursive
+          git log -1 --format='Moonlight %h — %s'
+
+      - name: Apply Eclipse changes
+        run: python3 scripts/apply_eclipse.py moonlight
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android SDK and NDK
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          NDK=$(grep -oP 'ndkVersion "\K[^"]+' moonlight/app/build.gradle)
+          SDK=$(grep -oP 'compileSdk \K[0-9]+' moonlight/app/build.gradle)
+          echo "NDK $NDK, SDK $SDK"
+          "$SDKM" --install "ndk;$NDK" "platforms;android-$SDK" > /dev/null
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        working-directory: moonlight
+        env:
+          ECLIPSE_KEYSTORE: ${{ github.workspace }}/signing/eclipse.keystore
+          ECLIPSE_KEYSTORE_PASSWORD: eclipse-public-key
+        run: ./gradlew --no-daemon --stacktrace assembleNonRootRelease
+
+      - name: Publish the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat VERSION)
+          APK=$(ls moonlight/app/build/outputs/apk/nonRoot/release/*.apk | head -1)
+          cp "$APK" Eclipse.apk
+          ls -la Eclipse.apk
+          gh release delete "v$VERSION" -y --cleanup-tag 2>/dev/null || true
+          gh release create "v$VERSION" Eclipse.apk \
+            --title "Eclipse $VERSION" --notes-file RELEASE_NOTES.md --latest
+
+      - name: Keep the APK with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eclipse-apk
+          path: Eclipse.apk
