@@ -88,7 +88,7 @@ jobs:
         run: |
           gh release delete test-build -y --cleanup-tag 2>/dev/null || true
           gh release create test-build Eclipse.apk --draft --prerelease \
-            --title "Build de test ($(cat VERSION), ${GITHUB_SHA::7})" --notes "Build de test, pas une version publiée. $(cat moonlight/e2e-summary.txt 2>/dev/null)"
+            --title "Build de test ($(cat VERSION), ${GITHUB_SHA::7})" --notes "Build de test, pas une version publiée. $(cat e2e-summary.txt 2>/dev/null)"
 
       - name: Publish the APK
         if: github.ref == 'refs/heads/main'
