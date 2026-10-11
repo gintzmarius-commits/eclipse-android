@@ -203,7 +203,10 @@ def manifest(t):
     stripped = re.sub(r"\s*<intent-filter>.*?</intent-filter>", "", block, flags=re.S)
     if stripped == block:
         raise SystemExit("apply_eclipse: PcView launcher filter not found")
-    return t[:a] + ECLIPSE_ACTIVITY + stripped + t[end:]
+    t = t[:a] + ECLIPSE_ACTIVITY + stripped + t[end:]
+    # Eclipse checks whether the Tailscale app is installed (Android 11+
+    # only shows apps that are declared here).
+    return must_sub(r"(\n    <application\b)", "\n    <queries>\n        <package android:name=\"com.tailscale.ipn\" />\n    </queries>\n\\1", t, count=1)
 
 edit(app / "src/main/AndroidManifest.xml", manifest)
 

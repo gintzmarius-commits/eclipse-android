@@ -31,6 +31,10 @@ public final class EclipseQr {
     public final String id;
     public final String token;
     public final String pin;
+    /** Tailscale address of the PC, to play away from home ("" if none). */
+    public final String remote;
+    /** Tailscale account of the PC ("" if unknown). */
+    public final String remoteAccount;
 
     private static final Pattern TOKEN = Pattern.compile("[a-z0-9]{6,32}");
     private static final Pattern PIN = Pattern.compile("[0-9]{4}");
@@ -48,13 +52,16 @@ public final class EclipseQr {
         }
     }
 
-    private EclipseQr(String name, List<String> addresses, int port, String id, String token, String pin) {
+    private EclipseQr(String name, List<String> addresses, int port, String id, String token, String pin,
+                      String remote, String remoteAccount) {
         this.name = name;
         this.addresses = Collections.unmodifiableList(addresses);
         this.port = port;
         this.id = id;
         this.token = token;
         this.pin = pin;
+        this.remote = remote;
+        this.remoteAccount = remoteAccount;
     }
 
     public static EclipseQr parse(String raw) throws Invalid {
@@ -136,7 +143,13 @@ public final class EclipseQr {
         }
         String name = args.get("n");
         name = name == null ? "" : cleanName(name, 64);
-        return new EclipseQr(name, addresses, port, id, token, pin);
+        String remote = args.get("ts");
+        if (remote == null || !ADDRESS.matcher(remote).matches()) {
+            remote = "";
+        }
+        String account = args.get("tu");
+        account = account == null ? "" : printable(account, 128);
+        return new EclipseQr(name, addresses, port, id, token, pin, remote, account);
     }
 
     private static String decode(String s) throws Invalid {
@@ -145,6 +158,18 @@ public final class EclipseQr {
         } catch (IllegalArgumentException | UnsupportedEncodingException e) {
             throw new Invalid("damaged");
         }
+    }
+
+    private static String printable(String s, int max) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length() && b.length() < max; ) {
+            int cp = s.codePointAt(i);
+            i += Character.charCount(cp);
+            if (cp >= 0x20 && cp != 0x7f && cp != '<' && cp != '>') {
+                b.appendCodePoint(cp);
+            }
+        }
+        return b.toString().trim();
     }
 
     /** Name given to the PC when pairing; token is "" without a QR code. */

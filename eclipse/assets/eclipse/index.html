@@ -26,6 +26,7 @@
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-qr" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 18.5h2v1.5h-2zM18 14h2v2h-2z" fill="currentColor"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.2 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.2-3.5-8.5s1.1-6.1 3.5-8.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></symbol>
 </svg>
 
@@ -130,11 +131,32 @@
       <div class="ok"><svg><use href="#i-check"/></svg></div>
       <h2>C'est connecté !</h2>
       <p class="muted">Tu peux jouer aux jeux de <b id="q-name"></b>.</p>
+      <div class="remote-hint" id="q-remote" hidden>
+        <div class="row"><svg><use href="#i-globe"/></svg><strong>Pour jouer hors de chez toi</strong></div>
+        <p>Installe <b>Tailscale</b> (gratuit) et connecte-toi avec <b class="q-account">le même compte que sur le PC</b>.</p>
+        <button class="btn primary wide" id="q-ts">Installer Tailscale</button>
+        <button class="btn wide" id="q-later">Plus tard</button>
+      </div>
     </div>
     <div class="pstep" id="q-fail" hidden>
       <h2>Ça n'a pas marché</h2>
       <p class="err" id="q-err"></p>
       <div class="row center"><button class="btn" data-close="s-qr">Fermer</button><button class="btn primary" id="q-retry"><svg><use href="#i-qr"/></svg>Rescanner</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Playing away from home (Tailscale) -->
+<div class="sheet" id="s-remote" hidden>
+  <div class="panel card">
+    <div class="grab"></div>
+    <div class="pstep">
+      <div class="qr-badge big"><svg><use href="#i-globe"/></svg></div>
+      <h2>Jouer hors de chez toi</h2>
+      <p class="muted" id="r-text"></p>
+      <ol class="r-steps" id="r-steps"></ol>
+      <button class="btn primary wide" id="r-go">Ouvrir Tailscale</button>
+      <p class="small muted" id="r-foot"></p>
     </div>
   </div>
 </div>
@@ -172,6 +194,7 @@
     <h2>Réglages</h2>
     <div class="menu">
       <button class="menu-row" id="set-stream"><svg><use href="#i-sliders"/></svg><span>Qualité et réglages du streaming<small>Résolution, images par seconde, manettes…</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
+      <button class="menu-row" id="set-remote"><svg><use href="#i-globe"/></svg><span>Jouer hors de chez toi<small id="set-remote-sub">Avec Tailscale, même en 4G</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
       <button class="menu-row" id="set-classic"><svg><use href="#i-moon"/></svg><span>Interface Moonlight classique<small>Toutes les options avancées</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
     </div>
     <p class="small muted ver" id="ver"></p>

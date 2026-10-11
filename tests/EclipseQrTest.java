@@ -49,6 +49,16 @@ public class EclipseQrTest {
         q = EclipseQr.parse("  eclipse://pair?t=abcdefgh&p=1234&a=pc.local  \n");
         check(q.port == EclipseQr.DEFAULT_PORT && q.name.isEmpty() && q.addresses.get(0).equals("pc.local"), "defaults");
 
+        // Tailscale (playing away from home)
+        q = EclipseQr.parse("eclipse://pair?a=192.168.1.20&id=AB-12&n=PC&p=1234&port=47989&t=abcdefgh&ts=100.101.102.103&tu=marius%40gmail.com&v=1");
+        check(q.remote.equals("100.101.102.103"), "tailscale address '" + q.remote + "'");
+        check(q.remoteAccount.equals("marius@gmail.com"), "tailscale account '" + q.remoteAccount + "'");
+        check(q.addresses.equals(Arrays.asList("192.168.1.20")), "tailscale not mixed with home addresses");
+        q = EclipseQr.parse("eclipse://pair?a=192.168.1.20&p=1234&t=abcdefgh");
+        check(q.remote.isEmpty() && q.remoteAccount.isEmpty(), "no tailscale");
+        q = EclipseQr.parse("eclipse://pair?a=192.168.1.20&p=1234&t=abcdefgh&ts=1.2.3.4%26x%3D1&tu=%3Cb%3Ex");
+        check(q.remote.isEmpty() && q.remoteAccount.equals("bx"), "unsafe tailscale values ignored");
+
         // Codes that cannot be used, and why
         check(reason("https://github.com/gintzmarius-commits/eclipse-android/releases/latest/download/Eclipse.apk").equals("app-link"), "download link");
         check(reason("https://example.com").equals("not-eclipse"), "other link");

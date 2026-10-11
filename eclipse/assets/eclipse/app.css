@@ -129,6 +129,16 @@ svg { width: 22px; height: 22px; flex: none; }
 .hint { color: var(--accent-text); background: rgba(246, 165, 26, .12); padding: 10px 14px; border-radius: 14px; line-height: 1.4; }
 .pstep .radar svg { width: 30px; height: 30px; }
 
+/* playing away from home */
+.remote-hint { width: 100%; display: grid; gap: 10px; margin-top: 6px; padding: 14px; border-radius: 20px; text-align: left;
+  background: rgba(255, 255, 255, .6); border: 1px solid rgba(255, 255, 255, .9); }
+.remote-hint .row { gap: 10px; color: var(--accent-text); }
+.remote-hint p { color: var(--muted); font-size: 14px; }
+.r-steps { margin: 0; padding-left: 22px; text-align: left; display: grid; gap: 6px; color: var(--text); font-size: 15px; align-self: stretch; }
+.r-steps:empty { display: none; }
+.r-steps b { color: var(--accent-text); }
+.btn.pill-sm svg { width: 16px; height: 16px; }
+
 /* games */
 .pc-hero { display: flex; align-items: center; gap: 14px; padding: 16px; }
 .pc-hero .txt strong { font-size: 20px; }

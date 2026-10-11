@@ -27,6 +27,7 @@ let current = null;    // uuid of the PC whose games are shown
 let games = {};        // uuid -> {apps, running, error}
 let pairing = null;    // {uuid, name} while a pairing runs
 let menuPc = null;
+let ts = { installed: false, vpn: false }; // Tailscale on this phone
 
 const byUuid = (u) => pcs.find((p) => p.uuid === u);
 const stateOf = (p) => (p.state === "ONLINE" ? "online" : p.state === "OFFLINE" ? "offline" : "wait");
@@ -103,6 +104,16 @@ const handlers = {
   qr(ev) {
     qrEvent(ev);
   },
+  tailscale(ev) {
+    const changed = ev.installed !== ts.installed || ev.vpn !== ts.vpn;
+    ts = ev;
+    if (changed) {
+      renderPcs();
+      if (current) renderGamesHeader();
+      if (!$("#s-remote").hidden) renderRemote();
+    }
+    $("#set-remote-sub").textContent = !ts.installed ? "Avec Tailscale, même en 4G" : ts.vpn ? "Tailscale est actif" : "Tailscale est installé, pas actif";
+  },
 };
 
 // ---------------------------------------------------------------------
@@ -124,6 +135,7 @@ function renderPcs() {
       let action = icon("i-chev", "chev");
       if (st === "online" && !p.paired) action = `<button class="btn primary pill-sm" data-pair="${esc(p.uuid)}">Connecter</button>`;
       if (st === "offline" && p.canWake) action = `<button class="btn pill-sm" data-wake="${esc(p.uuid)}">${icon("i-power")}Allumer</button>`;
+      if (st === "offline" && p.remote && !ts.vpn) action = `<button class="btn pill-sm" data-remote="${esc(p.uuid)}">${icon("i-globe")}Tailscale</button>`;
       return `<li class="pc" data-open="${esc(p.uuid)}">
         <div class="tile">${icon("i-desktop")}</div>
         <div class="txt"><strong>${esc(p.name)}</strong><span>${statusText(p)}${p.address ? " · " + esc(p.address) : ""}</span></div>
@@ -135,14 +147,16 @@ function renderPcs() {
 }
 
 $("#pcs").addEventListener("click", (e) => {
-  const t = e.target.closest("[data-pair],[data-wake],[data-menu],[data-open]");
+  const t = e.target.closest("[data-pair],[data-wake],[data-remote],[data-menu],[data-open]");
   if (!t) return;
+  if (t.dataset.remote) return openRemote(t.dataset.remote);
   if (t.dataset.pair) return openConnect(t.dataset.pair);
   if (t.dataset.wake) return N.wake(t.dataset.wake);
   if (t.dataset.menu) return openMenu(t.dataset.menu);
   const p = byUuid(t.dataset.open);
   if (!p) return;
   const st = stateOf(p);
+  if (st === "offline" && p.remote) return openRemote(p.uuid);
   if (st === "offline") return toast(p.canWake ? "Ce PC est éteint. Touche « Allumer »." : "Ce PC est éteint ou n'est pas sur ce Wi-Fi.");
   if (st === "wait") return toast("Connexion au PC en cours, patiente un instant…");
   if (!p.paired) return openConnect(p.uuid);
@@ -325,6 +339,17 @@ function qrEvent(ev) {
       qrStep("q-done");
       openSheet("s-qr");
       qrDoneUuid = ev.uuid;
+      if (ev.remote && !ev.tailscale) {
+        // Away from home needs Tailscale: say it now, while at home.
+        $("#q-remote").hidden = false;
+        $("#q-remote .q-account").textContent = ev.account || "le même compte que sur le PC";
+        $("#q-later").onclick = () => {
+          closeSheet("s-qr", true);
+          if (ev.uuid) openGames(ev.uuid);
+        };
+        return;
+      }
+      $("#q-remote").hidden = true;
       setTimeout(() => {
         if ($("#q-done").hidden || qrDoneUuid !== ev.uuid) return;
         closeSheet("s-qr", true);
@@ -339,6 +364,48 @@ function qrEvent(ev) {
       return;
   }
 }
+
+// ---------------------------------------------------------------------
+// Playing away from home (Tailscale)
+// ---------------------------------------------------------------------
+let remotePc = null;
+
+function openRemote(uuid) {
+  remotePc = uuid || null;
+  renderRemote();
+  openSheet("s-remote");
+  N.tailscale();
+}
+
+function renderRemote() {
+  const p = remotePc ? byUuid(remotePc) : pcs.find((x) => x.remote);
+  const account = p && p.account ? p.account : "";
+  const acc = account ? `<b>${esc(account)}</b>` : "le même compte que sur le PC";
+  let steps = [];
+  if (!p) {
+    $("#r-text").textContent = "Avec Tailscale (gratuit), ton téléphone retrouve ton PC partout, même en 4G.";
+    steps = ["Sur le PC, dans Eclipse, active <b>Jouer hors de chez toi</b>.", "Sur ce téléphone, installe <b>Tailscale</b> et connecte-toi avec le même compte.", "À la maison, scanne une fois le QR code d'Eclipse."];
+  } else if (!ts.installed) {
+    $("#r-text").textContent = `Pour jouer à ${p.name} hors de chez toi, il faut l'appli Tailscale (gratuite) sur ce téléphone.`;
+    steps = ["Installe <b>Tailscale</b>.", `Ouvre-la et connecte-toi avec ${acc}.`, "Reviens dans Eclipse : le PC apparaît en ligne."];
+  } else if (!ts.vpn) {
+    $("#r-text").textContent = "Tailscale est installé mais pas activé.";
+    steps = ["Ouvre <b>Tailscale</b>.", `Active-le (connecté avec ${acc}).`, "Reviens dans Eclipse : le PC apparaît en ligne."];
+  } else {
+    $("#r-text").textContent = "Tailscale est actif sur ce téléphone.";
+    steps = p ? [`Vérifie que ${esc(p.name)} est allumé, avec Eclipse et Tailscale activés.`, `Les deux appareils doivent utiliser ${acc}.`] : [];
+  }
+  $("#r-steps").innerHTML = steps.map((s) => `<li>${s}</li>`).join("");
+  $("#r-go").textContent = ts.installed ? "Ouvrir Tailscale" : "Installer Tailscale";
+  $("#r-foot").textContent = ts.installed && !ts.vpn ? "Astuce : laisse Tailscale activé, il consomme très peu de batterie." : "";
+}
+
+$("#r-go").onclick = () => N.openTailscale();
+$("#q-ts").onclick = () => N.openTailscale();
+$("#set-remote").onclick = () => {
+  closeSheet("s-settings");
+  openRemote(null);
+};
 
 // ---------------------------------------------------------------------
 // Add a PC, PC menu, settings
@@ -427,6 +494,7 @@ window.eclipseBack = () => {
 
 renderPcs();
 N.refresh();
+N.tailscale();
 
 // ---------------------------------------------------------------------
 // Demo data, only when this page is opened outside the app
@@ -436,7 +504,7 @@ function demoNative() {
   const list = [
     { uuid: "a", name: "Lenovo", state: "ONLINE", paired: true, address: "192.168.1.20", running: 2, canWake: true },
     { uuid: "b", name: "PC-SALON", state: "ONLINE", paired: false, address: "192.168.1.31", running: 0, canWake: true },
-    { uuid: "c", name: "PC-BUREAU", state: "OFFLINE", paired: true, address: "192.168.1.44", running: 0, canWake: true },
+    { uuid: "c", name: "PC-BUREAU", state: "OFFLINE", paired: true, address: "192.168.1.44", running: 0, canWake: true, remote: true, account: "marius@gmail.com" },
   ];
   const art = (c1, c2) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="300" height="400" fill="url(#g)"/></svg>`);
   return {
@@ -453,8 +521,10 @@ function demoNative() {
       later(() => window.ec.on("qr", { stage: "pair", name: "PC-SALON", uuid: "b" }), 1500);
       later(() => window.ec.on("qr", fail
         ? { stage: "error", name: "PC-SALON", error: "Ce QR code n'est plus valable. Rescanne le QR code affiché sur le PC." }
-        : { stage: "done", name: "PC-SALON", uuid: "b" }), 3500);
+        : { stage: "done", name: "PC-SALON", uuid: "b", remote: true, account: "marius@gmail.com", tailscale: false }), 3500);
     },
+    openTailscale: () => toast("Ouverture de Tailscale…"),
+    tailscale: () => later(() => window.ec.on("tailscale", { installed: location.search.includes("ts"), vpn: false }), 100),
     cancelPairing: () => {},
     addComputer: () => later(() => window.ec.on("added", { ok: false, error: "Aucun PC ne répond à cette adresse." }), 900),
     play: () => toast("Lancement…"), quit: () => toast("Jeu quitté"), wake: () => toast("Réveil envoyé"),

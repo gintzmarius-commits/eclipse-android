@@ -6,6 +6,11 @@ import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.graphics.Color;
 import android.net.Uri;
 import android.opengl.GLSurfaceView;
@@ -256,6 +261,7 @@ public class EclipseActivity extends Activity {
         inForeground = true;
         startUpdates();
         emit("resume", "{}");
+        emitTailscale();
     }
 
     @Override
@@ -313,6 +319,7 @@ public class EclipseActivity extends Activity {
                 if (details.uuid == null) {
                     return;
                 }
+                applyRemote(details);
                 computers.put(details.uuid, details);
                 pushComputers();
             }
@@ -347,6 +354,10 @@ public class EclipseActivity extends Activity {
         o.put("address", addressOf(d));
         o.put("running", d.runningGameId);
         o.put("canWake", d.macAddress != null);
+        if (storedRemote(d.uuid) != null) {
+            o.put("remote", true);
+            o.put("account", prefs().getString("account:" + d.uuid, ""));
+        }
         return o;
     }
 
@@ -359,6 +370,102 @@ public class EclipseActivity extends Activity {
             emit("computers", arr.toString());
         } catch (JSONException e) {
             LimeLog.warning("Eclipse: " + e);
+        }
+        emitTailscale();
+    }
+
+    // ------------------------------------------------------------------
+    // Playing away from home (Tailscale)
+    // ------------------------------------------------------------------
+
+    static final String TAILSCALE_PACKAGE = "com.tailscale.ipn";
+
+    private SharedPreferences prefs() {
+        return getSharedPreferences("eclipse", MODE_PRIVATE);
+    }
+
+    /** Tailscale address of a PC, from its QR code (null if none). */
+    private ComputerDetails.AddressTuple storedRemote(String uuid) {
+        if (uuid == null) return null;
+        String v = prefs().getString("remote:" + uuid, null);
+        if (v == null) return null;
+        int bar = v.lastIndexOf('|');
+        try {
+            return new ComputerDetails.AddressTuple(v.substring(0, bar), Integer.parseInt(v.substring(bar + 1)));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * The PC's Tailscale address goes in the "manual address" slot, the
+     * only one Moonlight never overwrites (the home address is found again
+     * on the Wi-Fi each time): both are tried, the one that answers wins.
+     */
+    private void applyRemote(ComputerDetails d) {
+        ComputerDetails.AddressTuple r = storedRemote(d.uuid);
+        if (r != null && (d.manualAddress == null || !r.address.equals(d.manualAddress.address) || r.port != d.manualAddress.port)) {
+            d.manualAddress = r;
+        }
+    }
+
+    private void saveRemote(ComputerDetails target, EclipseQr q) {
+        if (q.remote.isEmpty()) return;
+        prefs().edit()
+                .putString("remote:" + target.uuid, q.remote + "|" + q.port)
+                .putString("account:" + target.uuid, q.remoteAccount)
+                .apply();
+        if (managerBinder != null) {
+            ComputerDetails live = managerBinder.getComputer(target.uuid);
+            if (live != null) applyRemote(live);
+        }
+        applyRemote(target);
+    }
+
+    private boolean tailscaleInstalled() {
+        try {
+            getPackageManager().getPackageInfo(TAILSCALE_PACKAGE, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** A VPN (Tailscale) is connected on this phone. */
+    @SuppressWarnings("deprecation")
+    private boolean vpnActive() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            for (Network n : cm.getAllNetworks()) {
+                NetworkCapabilities c = cm.getNetworkCapabilities(n);
+                if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private void emitTailscale() {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("installed", tailscaleInstalled());
+            o.put("vpn", vpnActive());
+            emit("tailscale", o.toString());
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private void openTailscale() {
+        Intent i = getPackageManager().getLaunchIntentForPackage(TAILSCALE_PACKAGE);
+        if (i == null) {
+            i = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + TAILSCALE_PACKAGE));
+        }
+        try {
+            startActivity(i);
+        } catch (Exception e) {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + TAILSCALE_PACKAGE)));
         }
     }
 
@@ -648,7 +755,14 @@ public class EclipseActivity extends Activity {
             }
             boolean otherPc = false;
             if (target == null) {
-                for (String addr : q.addresses) {
+                // Home addresses first, then the Tailscale one (first if
+                // Tailscale is on: the phone is probably away from home).
+                List<String> order = new ArrayList<>(q.addresses);
+                if (!q.remote.isEmpty() && !order.contains(q.remote)) {
+                    if (vpnActive()) order.add(0, q.remote);
+                    else order.add(q.remote);
+                }
+                for (String addr : order) {
                     if (superseded(job)) return;
                     ComputerDetails d = new ComputerDetails();
                     d.manualAddress = new ComputerDetails.AddressTuple(addr, q.port);
@@ -709,7 +823,7 @@ public class EclipseActivity extends Activity {
                 if (live != null) live.serverCert = pm.getPairedCert();
                 target.serverCert = pm.getPairedCert();
                 mb.invalidateStateForComputer(target.uuid);
-                qrPaired(target, name, job);
+                qrPaired(target, name, job, q);
             } else {
                 emitQr("error", name, target.uuid, st == PairState.PIN_WRONG
                         ? "Le code ne correspond plus. Rescanne le QR code affiché sur le PC."
@@ -798,12 +912,25 @@ public class EclipseActivity extends Activity {
         }
     }
 
-    private void qrPaired(ComputerDetails target, String name, int job) {
+    private void qrPaired(ComputerDetails target, String name, int job, EclipseQr q) {
         if (superseded(job)) return;
         target.pairState = PairState.PAIRED;
+        saveRemote(target, q);
         computers.put(target.uuid, target);
         pushComputers();
-        emitQr("done", name, target.uuid, null);
+        try {
+            JSONObject ev = new JSONObject();
+            ev.put("stage", "done");
+            ev.put("name", name);
+            ev.put("uuid", target.uuid);
+            if (!q.remote.isEmpty()) {
+                ev.put("remote", true);
+                ev.put("account", q.remoteAccount);
+                ev.put("tailscale", tailscaleInstalled());
+            }
+            emit("qr", ev.toString());
+        } catch (JSONException ignored) {
+        }
     }
 
     /** Explains a pairing failure simply. */
@@ -1036,11 +1163,28 @@ public class EclipseActivity extends Activity {
 
         @JavascriptInterface
         public void remove(final String uuid) {
+            prefs().edit().remove("remote:" + uuid).remove("account:" + uuid).apply();
             ComputerDetails c = computers.remove(uuid);
             if (c != null && managerBinder != null) {
                 managerBinder.removeComputer(c);
             }
             pushComputers();
+        }
+
+        /** Opens the Tailscale app (or its Play Store page). */
+        @JavascriptInterface
+        public void openTailscale() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    EclipseActivity.this.openTailscale();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void tailscale() {
+            emitTailscale();
         }
 
         @JavascriptInterface
