@@ -665,13 +665,11 @@ public class EclipseActivity extends Activity {
             emitQr("pair", name, target.uuid, null);
             stopUpdates(true);
             stopped = true;
+            // Even when the phone already knows this PC, it pairs again: the PC
+            // waits for it to say "connected", and gets the phone's current name.
             NvHTTP h = http(target);
             pairHttp = h;
             if (superseded(job)) return;
-            if (h.getPairState() == PairState.PAIRED) {
-                qrPaired(target, name, job);
-                return;
-            }
             PairingManager pm = h.getPairingManager();
             String serverInfo = h.getServerInfo(true);
             if (superseded(job)) return;
