@@ -35,11 +35,18 @@ public final class EclipseQr {
     public final String remote;
     /** Tailscale account of the PC ("" if unknown). */
     public final String remoteAccount;
+    /**
+     * The PC opens this phone's Tailscale sign-in page itself (Eclipse 2.3
+     * or newer on the PC): the phone sends the page's key with its name.
+     */
+    public final boolean pcLogin;
 
     private static final Pattern TOKEN = Pattern.compile("[a-z0-9]{6,32}");
     private static final Pattern PIN = Pattern.compile("[0-9]{4}");
     private static final Pattern ADDRESS = Pattern.compile("[A-Za-z0-9.\\-]{1,253}");
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9\\-]{1,64}");
+    /** A Tailscale sign-in page, and its key. */
+    public static final Pattern AUTH_URL = Pattern.compile("https://login\\.tailscale\\.com/a/([A-Za-z0-9]{6,64})");
 
     /** Why a scanned code cannot be used. */
     public static final class Invalid extends Exception {
@@ -53,7 +60,7 @@ public final class EclipseQr {
     }
 
     private EclipseQr(String name, List<String> addresses, int port, String id, String token, String pin,
-                      String remote, String remoteAccount) {
+                      String remote, String remoteAccount, boolean pcLogin) {
         this.name = name;
         this.addresses = Collections.unmodifiableList(addresses);
         this.port = port;
@@ -62,6 +69,7 @@ public final class EclipseQr {
         this.pin = pin;
         this.remote = remote;
         this.remoteAccount = remoteAccount;
+        this.pcLogin = pcLogin;
     }
 
     public static EclipseQr parse(String raw) throws Invalid {
@@ -149,7 +157,8 @@ public final class EclipseQr {
         }
         String account = args.get("tu");
         account = account == null ? "" : printable(account, 128);
-        return new EclipseQr(name, addresses, port, id, token, pin, remote, account);
+        boolean pcLogin = !remote.isEmpty() && "1".equals(args.get("tl"));
+        return new EclipseQr(name, addresses, port, id, token, pin, remote, account, pcLogin);
     }
 
     private static String decode(String s) throws Invalid {
@@ -170,6 +179,15 @@ public final class EclipseQr {
             }
         }
         return b.toString().trim();
+    }
+
+    /**
+     * Token sent to the PC: the QR code's, followed by "~" and the key of
+     * this phone's Tailscale sign-in page when the PC is to open it.
+     */
+    public static String deviceToken(String token, String authUrl) {
+        java.util.regex.Matcher m = AUTH_URL.matcher(authUrl == null ? "" : authUrl);
+        return m.matches() ? token + "~" + m.group(1) : token;
     }
 
     /** Name given to the PC when pairing; token is "" without a QR code. */

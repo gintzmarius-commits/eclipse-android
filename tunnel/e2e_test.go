@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -49,7 +50,15 @@ func TestTailnetRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	pcIP := st.TailscaleIPs[0].String()
-	ln, err := pc.Listen("tcp", ":47989")
+	// Sunshine's HTTP port answers like Sunshine; the "HTTPS" port echoes.
+	hl, err := pc.Listen("tcp", ":47989")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go http.Serve(hl, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(sunshineServerInfo))
+	}))
+	ln, err := pc.Listen("tcp", ":47984")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,11 +92,37 @@ func TestTailnetRelay(t *testing.T) {
 					upc.WriteTo(bytes.Repeat([]byte{byte(i)}, 1024), a)
 				}
 			}
+			if string(b[:n]) == "video" {
+				// like a video stream at 20 Mbit/s: one frame (~42 KB,
+				// 41 packets) every 16 ms, each frame sent at once.
+				for f := 0; f < 120; f++ {
+					for i := 0; i < 41; i++ {
+						upc.WriteTo(bytes.Repeat([]byte{byte(f)}, 1024), a)
+					}
+					time.Sleep(16 * time.Millisecond)
+				}
+				// then a burst: a key frame of 400 KB at once
+				for i := 0; i < 400; i++ {
+					upc.WriteTo(bytes.Repeat([]byte{0xee}, 1024), a)
+				}
+			}
 		}
 	}()
 
-	// The phone
-	if err := Start(filepath.Join(t.TempDir(), "phone"), "eclipse-test-phone"); err != nil {
+	// The phone, in the conditions of an Android app: no home, cache or
+	// temporary folder that Go knows of, working directory "/" (Eclipse
+	// 2.2.0 stopped there: "no safe place found to store log state").
+	phoneDir := filepath.Join(t.TempDir(), "phone")
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("STATE_DIRECTORY", "")
+	t.Setenv("TS_LOGS_DIR", "")
+	t.Setenv("TMPDIR", "/nonexistent-eclipse-tmp")
+	if wd, err := os.Getwd(); err == nil {
+		os.Chdir("/")
+		defer os.Chdir(wd)
+	}
+	if err := Start(phoneDir, "eclipse-test-phone"); err != nil {
 		t.Fatal(err)
 	}
 	var s status
@@ -105,16 +140,55 @@ func TestTailnetRelay(t *testing.T) {
 	if msg := Probe(pcIP, 47989, 20000); msg != "" {
 		t.Fatalf("probe: %s", msg)
 	}
-	if err := Forward(pcIP, "47989", "47998"); err != nil {
+
+	// The PC is found on the private network, with its Sunshine id.
+	start := time.Now()
+	out, err := Discover("47989", 8000)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Forward(pcIP, "47989", "47998"); err != nil { // same values: nothing to do
-		t.Fatal(err)
+	var pcs []sunshinePC
+	json.Unmarshal([]byte(out), &pcs)
+	t.Logf("discover (%v): %s", time.Since(start), out)
+	if len(pcs) != 1 || pcs[0].IP != pcIP || pcs[0].ID != "DE7509DC-6D80-5E2F-7700-BF75D0205FCB" || pcs[0].Port != 47989 {
+		t.Fatalf("discover: %s", out)
 	}
 
-	start := time.Now()
+	if err := Forward(pcIP, "47984,47989", "47998"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Forward(pcIP, "47984,47989", "47998"); err != nil { // same values: nothing to do
+		t.Fatal(err)
+	}
+	// A second PC address on its own local address (here the same PC).
+	if err := ForwardAt("127.0.0.2", pcIP, "47984", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ForwardAt("10.0.0.1", pcIP, "47984", ""); err == nil {
+		t.Fatal("a relay on a network address was accepted")
+	}
+	for _, local := range []string{"127.0.0.1", "127.0.0.2"} {
+		c, err := net.Dial("tcp4", local+":47984")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Write([]byte("two"))
+		c.(*net.TCPConn).CloseWrite()
+		got, _ := io.ReadAll(c)
+		c.Close()
+		if string(got) != "TWO" {
+			t.Fatalf("relay on %s: %q", local, got)
+		}
+	}
+	StopForward("127.0.0.2")
+	if c, err := net.DialTimeout("tcp4", "127.0.0.2:47984", time.Second); err == nil {
+		c.Close()
+		t.Fatal("relay still there after StopForward")
+	}
+
+	start = time.Now()
 	for i := 0; i < 5; i++ {
-		c, err := net.Dial("tcp4", "127.0.0.1:47989")
+		c, err := net.Dial("tcp4", "127.0.0.1:47984")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -158,6 +232,26 @@ func TestTailnetRelay(t *testing.T) {
 	t.Logf("udp burst: %d/200 datagrams of 1024 bytes", got)
 	if got < 150 {
 		t.Fatalf("udp burst: only %d/200", got)
+	}
+
+	// Video-like stream: 120 frames of 41 packets, then a 400-packet key frame.
+	c.Write([]byte("video"))
+	frames, key := 0, 0
+	for {
+		c.SetReadDeadline(time.Now().Add(3 * time.Second))
+		n, err := c.Read(b)
+		if err != nil {
+			break
+		}
+		if n == 1024 && b[0] == 0xee {
+			key++
+		} else if n == 1024 {
+			frames++
+		}
+	}
+	t.Logf("video: %d/4920 frame packets, key frame %d/400", frames, key)
+	if frames < 4920*9/10 {
+		t.Errorf("video: too many packets lost (%d/4920)", frames)
 	}
 
 	if err := Logout(); err != nil {

@@ -189,6 +189,23 @@ edit(nvc, lambda t: must_sub(
         }
 """, t, count=1))
 
+#     On 4G (no Wi-Fi), the PC's home address cannot answer: Moonlight
+#     skips it instead of waiting 3 seconds for it at every check, so a PC
+#     reached through Tailscale shows up at once.
+cms = app / "src/main/java/com/limelight/computers/ComputerManagerService.java"
+edit(cms, lambda t: must_sub(
+    r'ParallelPollTuple localInfo = new ParallelPollTuple\(details\.localAddress, details\);',
+    'ParallelPollTuple localInfo = new ParallelPollTuple(com.limelight.EclipseNet.lanAddress(ComputerManagerService.this, details.localAddress), details);',
+    t, count=1))
+
+#     On 4G through Tailscale, the default video bit rate is lowered (see
+#     EclipseNet.bitrate); a bit rate chosen in the settings is kept.
+game = app / "src/main/java/com/limelight/Game.java"
+edit(game, lambda t: must_sub(
+    r'\.setBitrate\(prefConfig\.bitrate\)',
+    '.setBitrate(com.limelight.EclipseNet.bitrate(Game.this, host, prefConfig.bitrate))',
+    t, count=1))
+
 # 5) The Eclipse screen opens the app; Moonlight's screen stays reachable
 #    from Eclipse's settings ("Interface Moonlight classique").
 ECLIPSE_ACTIVITY = """<activity

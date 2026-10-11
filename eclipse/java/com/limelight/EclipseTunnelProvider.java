@@ -63,6 +63,17 @@ public final class EclipseTunnelProvider extends ContentProvider {
                 case "forward":
                     eclipsenet.Eclipsenet.forward(arg, extras.getString("tcp", ""), extras.getString("udp", ""));
                     break;
+                case "forwardAt":
+                    eclipsenet.Eclipsenet.forwardAt(extras.getString("local", ""), arg,
+                            extras.getString("tcp", ""), extras.getString("udp", ""));
+                    break;
+                case "stopForward":
+                    eclipsenet.Eclipsenet.stopForward(arg);
+                    break;
+                case "discover":
+                    out.putString("json", eclipsenet.Eclipsenet.discover(extras.getString("ports", "47989"),
+                            extras.getInt("timeout", 4000)));
+                    break;
                 case "lastLog":
                     out.putString("text", eclipsenet.Eclipsenet.lastLog());
                     break;

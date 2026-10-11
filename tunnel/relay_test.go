@@ -63,7 +63,7 @@ func TestRelay(t *testing.T) {
 	}()
 	var d net.Dialer
 	f, err := startForward(func(ctx context.Context, n, a string) (net.Conn, error) { return d.DialContext(ctx, n, a) },
-		"127.0.0.2", []int{tcpPort}, []int{udpPort})
+		net.IPv4(127, 0, 0, 1), "127.0.0.2", []int{tcpPort}, []int{udpPort})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +82,14 @@ func TestRelay(t *testing.T) {
 		if !bytes.Equal(got, bytes.Repeat([]byte("ABC"), 100000)) {
 			t.Fatalf("tcp: got %d bytes", len(got))
 		}
+	}
+	// finished connections are forgotten (no leak over a long session)
+	time.Sleep(200 * time.Millisecond)
+	f.mu.Lock()
+	open := len(f.closers)
+	f.mu.Unlock()
+	if open != 2 { // the two listeners
+		t.Fatalf("%d things still open after the connections ended", open)
 	}
 
 	// UDP: two local senders get their own answers
@@ -118,7 +126,7 @@ func TestPortsInUse(t *testing.T) {
 	ln, _ := net.Listen("tcp4", "127.0.0.1:0")
 	defer ln.Close()
 	p := ln.Addr().(*net.TCPAddr).Port
-	if _, err := startForward(nil, "127.0.0.2", []int{p}, nil); err == nil {
+	if _, err := startForward(nil, net.IPv4(127, 0, 0, 1), "127.0.0.2", []int{p}, nil); err == nil {
 		t.Fatal("expected an error for a port in use")
 	}
 }
@@ -130,5 +138,59 @@ func TestParsePorts(t *testing.T) {
 	}
 	if _, err := parsePorts("1,x"); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// Two PCs relayed at once, each on its own local address with the same
+// ports (127.0.0.1 and 127.0.0.3 -> "PCs" on 127.0.0.2 and 127.0.0.4).
+func TestTwoRelays(t *testing.T) {
+	port := freePort(t, "tcp")
+	var d net.Dialer
+	dial := func(ctx context.Context, n, a string) (net.Conn, error) { return d.DialContext(ctx, n, a) }
+	for i, pc := range []string{"127.0.0.2", "127.0.0.4"} {
+		ln, err := net.Listen("tcp4", net.JoinHostPort(pc, strconv.Itoa(port)))
+		if err != nil {
+			t.Skip("loopback address unavailable:", err)
+		}
+		defer ln.Close()
+		go func(ln net.Listener, tag string) {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				c.Write([]byte(tag))
+				c.Close()
+			}
+		}(ln, "pc"+strconv.Itoa(i+1))
+	}
+	f1, err := startForward(dial, net.IPv4(127, 0, 0, 1), "127.0.0.2", []int{port}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f1.Close()
+	f2, err := startForward(dial, net.IPv4(127, 0, 0, 3), "127.0.0.4", []int{port}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+	for local, want := range map[string]string{"127.0.0.1": "pc1", "127.0.0.3": "pc2"} {
+		c, err := net.Dial("tcp4", net.JoinHostPort(local, strconv.Itoa(port)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(c)
+		c.Close()
+		if string(got) != want {
+			t.Fatalf("%s: got %q, want %q", local, got, want)
+		}
+	}
+}
+
+func TestLoopbackFor(t *testing.T) {
+	for in, ok := range map[string]bool{"127.0.0.1": true, "127.0.0.42": true, "127.255.0.1": true, "10.0.0.1": false, "::1": false, "x": false, "": false} {
+		if _, err := loopback(in); (err == nil) != ok {
+			t.Errorf("loopback(%q): %v", in, err)
+		}
 	}
 }

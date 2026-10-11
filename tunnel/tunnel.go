@@ -33,8 +33,8 @@ var (
 	mu       sync.Mutex
 	srv      *tsnet.Server
 	startErr error
-	fwd      *forwarder
-	fwdKey   string
+	fwds     = map[string]*forwarder{} // by local address (127.x.x.x)
+	fwdKeys  = map[string]string{}
 	lastLog  string
 )
 
@@ -42,6 +42,17 @@ func init() {
 	// Android does not let apps list network interfaces (golang/go#40569):
 	// report the addresses the system uses to reach the Internet instead.
 	netmon.RegisterInterfaceGetter(androidInterfaces)
+}
+
+// writable reports whether files can be created in dir.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".eclipse-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
 }
 
 // SetCrashFile makes the Go runtime write the report of a fatal error to
@@ -78,6 +89,18 @@ func Start(dir, hostname string) (err error) {
 	envknob.Setenv("TS_NO_LOGS_NO_SUPPORT", "true")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
+	}
+	// An Android app has no home, cache or temporary folder that Go knows
+	// of: Tailscale would stop the whole app ("no safe place found to store
+	// log state", Eclipse 2.2.0). Give it folders inside the app's own.
+	for env, sub := range map[string]string{"TS_LOGS_DIR": "logs", "TMPDIR": "tmp", "HOME": "home"} {
+		d := filepath.Join(dir, sub)
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			return err
+		}
+		if env == "TS_LOGS_DIR" || os.Getenv(env) == "" || !writable(os.Getenv(env)) {
+			os.Setenv(env, d)
+		}
 	}
 	control := controlURL
 	// Tests on an emulator point the app to a local test network (this
@@ -217,11 +240,22 @@ func client() (interface {
 	return s.LocalClient()
 }
 
-// Forward relays 127.0.0.1 ports to the PC's Tailscale address. Ports
-// are comma-separated lists. Calling it again with other values replaces
-// the previous relay; with the same values it does nothing.
-func Forward(target, tcpPorts, udpPorts string) (err error) {
+// Forward relays 127.0.0.1 ports to the PC's Tailscale address (see
+// ForwardAt).
+func Forward(target, tcpPorts, udpPorts string) error {
+	return ForwardAt("127.0.0.1", target, tcpPorts, udpPorts)
+}
+
+// ForwardAt relays ports of local (a 127.x.x.x address, one per PC) to the
+// PC's Tailscale address. Ports are comma-separated lists. Calling it again
+// with other values replaces that relay; with the same values it does
+// nothing.
+func ForwardAt(local, target, tcpPorts, udpPorts string) (err error) {
 	defer catch(&err)
+	lip, err := loopback(local)
+	if err != nil {
+		return err
+	}
 	if _, err := netip.ParseAddr(target); err != nil {
 		return fmt.Errorf("adresse invalide : %q", target)
 	}
@@ -239,20 +273,42 @@ func Forward(target, tcpPorts, udpPorts string) (err error) {
 		return errors.New("not started")
 	}
 	key := target + "|" + tcpPorts + "|" + udpPorts
-	if fwd != nil && fwdKey == key {
+	if fwds[local] != nil && fwdKeys[local] == key {
 		return nil
 	}
-	if fwd != nil {
-		fwd.Close()
-		fwd, fwdKey = nil, ""
+	if old := fwds[local]; old != nil {
+		old.Close()
+		delete(fwds, local)
+		delete(fwdKeys, local)
 	}
-	s := srv
-	f, err := startForward(s.Dial, target, tp, up)
+	f, err := startForward(srv.Dial, lip, target, tp, up)
 	if err != nil {
 		return err
 	}
-	fwd, fwdKey = f, key
+	fwds[local], fwdKeys[local] = f, key
 	return nil
+}
+
+// StopForward ends the relay of local (nothing if there is none).
+func StopForward(local string) {
+	mu.Lock()
+	f := fwds[local]
+	delete(fwds, local)
+	delete(fwdKeys, local)
+	mu.Unlock()
+	if f != nil {
+		f.Close()
+	}
+}
+
+// loopback checks that a relay address is one of this phone's own
+// (127.0.0.0/8): the relay never listens on a network.
+func loopback(s string) (net.IP, error) {
+	a, err := netip.ParseAddr(s)
+	if err != nil || !a.Is4() || !a.IsLoopback() {
+		return nil, fmt.Errorf("adresse locale invalide : %q", s)
+	}
+	return net.IP(a.AsSlice()), nil
 }
 
 // Probe tries a TCP connection to target:port over the private network

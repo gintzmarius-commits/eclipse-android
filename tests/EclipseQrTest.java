@@ -59,6 +59,17 @@ public class EclipseQrTest {
         q = EclipseQr.parse("eclipse://pair?a=192.168.1.20&p=1234&t=abcdefgh&ts=1.2.3.4%26x%3D1&tu=%3Cb%3Ex");
         check(q.remote.isEmpty() && q.remoteAccount.equals("bx"), "unsafe tailscale values ignored");
 
+        // The PC opens the phone's Tailscale sign-in page (Eclipse 2.3)
+        q = EclipseQr.parse("eclipse://pair?a=192.168.1.20&id=AB-12&n=PC&p=1234&port=47989&t=abcdefgh&tl=1&ts=100.101.102.103&tu=marius%40gmail.com&v=1");
+        check(q.pcLogin, "tl=1 read");
+        check(!EclipseQr.parse("eclipse://pair?a=192.168.1.20&p=1234&t=abcdefgh&tl=1").pcLogin, "tl ignored without Tailscale address");
+        check(!EclipseQr.parse("eclipse://pair?a=192.168.1.20&p=1234&t=abcdefgh&ts=100.1.2.3").pcLogin, "no tl: old PC");
+        check(EclipseQr.deviceToken("abcdefgh", "https://login.tailscale.com/a/1a2b3c4d5e6f").equals("abcdefgh~1a2b3c4d5e6f"), "token with sign-in key");
+        check(EclipseQr.deviceToken("abcdefgh", "https://evil.example/a/1a2b3c4d5e6f").equals("abcdefgh"), "other site refused");
+        check(EclipseQr.deviceToken("abcdefgh", "https://login.tailscale.com/a/1a2b&x=.y").equals("abcdefgh"), "odd key refused");
+        check(EclipseQr.deviceToken("abcdefgh", null).equals("abcdefgh") && EclipseQr.deviceToken("abcdefgh", "").equals("abcdefgh"), "no page");
+        check(EclipseQr.deviceName(EclipseQr.deviceToken("abcdefgh", "https://login.tailscale.com/a/f00d1234"), "Pixel 7").equals("Eclipse.abcdefgh~f00d1234.Pixel 7"), "device name with key");
+
         // Codes that cannot be used, and why
         check(reason("https://github.com/gintzmarius-commits/eclipse-android/releases/latest/download/Eclipse.apk").equals("app-link"), "download link");
         check(reason("https://example.com").equals("not-eclipse"), "other link");

@@ -237,6 +237,42 @@ public final class EclipseTunnel {
         check(call("forward", ip, x));
     }
 
+    /**
+     * Relays one PC on its own local address (127.0.0.2, .3, …: several PCs
+     * at once), like {@link #forward(String, int)}.
+     */
+    public static void forwardAt(String local, String ip, int base) throws Exception {
+        Bundle x = new Bundle();
+        x.putString("local", local);
+        x.putString("tcp", (base - 5) + "," + base + "," + (base + 21));
+        x.putString("udp", (base + 9) + "," + (base + 10) + "," + (base + 11) + "," + (base + 13));
+        check(call("forwardAt", ip, x));
+    }
+
+    public static void stopForward(String local) {
+        try {
+            call("stopForward", local, null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * The PCs of the private network running Sunshine:
+     * [{ip, port, id, name, peer}], empty if none or not connected.
+     */
+    public static org.json.JSONArray discover(String ports, int timeoutMs) {
+        try {
+            Bundle x = new Bundle();
+            x.putString("ports", ports);
+            x.putInt("timeout", timeoutMs);
+            Bundle b = call("discover", null, x);
+            check(b);
+            return new org.json.JSONArray(b.getString("json", "[]"));
+        } catch (Throwable t) {
+            return new org.json.JSONArray();
+        }
+    }
+
     public static String lastLog() {
         try {
             return call("lastLog", null, null).getString("text", "");
