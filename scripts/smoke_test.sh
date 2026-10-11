@@ -75,13 +75,14 @@ wait_alive() { # seconds, label
 launch() {
   local try i
   for try in 1 2 3; do
-    adb shell am start -W -n "$ACT" > /dev/null 2>&1
+    # after the first try, a fresh task (a "open with" chooser left in
+    # Eclipse's task on Android 8 would stay in front otherwise)
+    if [ $try = 1 ]; then adb shell am start -W -n "$ACT" > /dev/null 2>&1
+    else adb shell am start -W --activity-clear-task -n "$ACT" > /dev/null 2>&1; fi
     for i in $(seq 1 8); do
       [ -n "$(pid_of $PKG)" ] && return 0
       sleep 1
     done
-    # Android 8: a browser left in front can keep Eclipse from starting
-    adb shell am force-stop com.android.chrome > /dev/null 2>&1
     adb shell input keyevent KEYCODE_HOME
     sleep 2
   done
@@ -160,7 +161,8 @@ if [ $TUNNEL = 1 ]; then
   shot 3-signin
   if [ -n "$(pid_of $PKG:tunnel)" ]; then note "OK le moteur Tailscale tourne dans son propre processus"
   else fail "le processus du moteur Tailscale n'a pas démarré"; fi
-  adb shell am force-stop com.android.chrome > /dev/null 2>&1   # the person leaves the browser
+  adb shell input keyevent KEYCODE_BACK   # the person leaves the browser (or the "open with" chooser)
+  sleep 1
   launch   # back in Eclipse
   wait_alive 5 "retour dans Eclipse" && shot 4-back
   if screen_has 4-back "Une seule fois"; then note "OK Eclipse attend la connexion à Tailscale"
@@ -244,7 +246,7 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   CTX=$(adb shell stat -c %C /data/data/$PKG | tr -d '\r')
   OWN=$(adb shell stat -c %u:%g /data/data/$PKG | tr -d '\r')
   D=/data/data/$PKG/files/tailscale
-  adb shell "mkdir -p $D && echo '$CTRL' > $D/test-control-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files"
+  adb shell "mkdir -p $D && echo '$CTRL' > $D/test-control-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files; restorecon -R /data/data/$PKG/files"
   launch
   wait_alive 4 "lancement"
   QR3="eclipse://pair?a=192.168.77.77&id=DE7509DC-6D80-5E2F-7700-BF75D0205FCB&n=Lenovo+500w+Gen+5&p=1234&port=47989&t=abcdefgh&tl=1&ts=$PCIP&tu=test%40example.com&v=1"
