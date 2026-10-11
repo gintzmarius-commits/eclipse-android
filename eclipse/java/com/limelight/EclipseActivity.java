@@ -75,7 +75,7 @@ import javax.microedition.khronos.opengles.GL10;
  */
 public class EclipseActivity extends Activity {
     private WebView web;
-    private ComputerManagerService.ComputerManagerBinder managerBinder;
+    private volatile ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean polling, inForeground, pageReady;
     private float density = 1f;
     private int insetTop, insetBottom, insetLeft, insetRight;
@@ -580,11 +580,31 @@ public class EclipseActivity extends Activity {
         return job != pairJob.get();
     }
 
+    /**
+     * Stops the requests of the pairing in progress. Repeated for a few
+     * seconds, in case the pairing was just about to send its next request.
+     */
     private void cancelPairHttp() {
-        NvHTTP h = pairHttp;
-        if (h != null) {
-            h.eclipseCancel();
+        final NvHTTP h = pairHttp;
+        if (h == null) {
+            return;
         }
+        h.eclipseCancel();
+        new Thread() {
+            @Override
+            public void run() {
+                for (int i = 0; i < 10 && pairHttp == h; i++) {
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                    if (pairHttp == h) {
+                        h.eclipseCancel();
+                    }
+                }
+            }
+        }.start();
     }
 
     private ComputerManagerService.ComputerManagerBinder waitBinder() throws InterruptedException {
@@ -654,6 +674,7 @@ public class EclipseActivity extends Activity {
             }
             PairingManager pm = h.getPairingManager();
             String serverInfo = h.getServerInfo(true);
+            if (superseded(job)) return;
             EclipsePairing.setToken(q.token);
             long until = System.currentTimeMillis() + 60000;
             PairState st;
@@ -722,8 +743,10 @@ public class EclipseActivity extends Activity {
                     ev.put("ok", true);
                 } else {
                     PairingManager pm = h.getPairingManager();
+                    String serverInfo = h.getServerInfo(true);
+                    if (superseded(job)) return;
                     EclipsePairing.setToken("");
-                    PairState st = pm.pair(h.getServerInfo(true), pin);
+                    PairState st = pm.pair(serverInfo, pin);
                     if (st == PairState.PAIRED) {
                         ComputerDetails live = managerBinder.getComputer(c.uuid);
                         if (live != null) live.serverCert = pm.getPairedCert();
