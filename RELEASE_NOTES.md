@@ -1,8 +1,9 @@
-**Eclipse pour Android**, la première version.
+**Eclipse pour Android 1.1.0** : la même interface Liquid Glass que sur le PC.
 
-- Le nom Eclipse, l'icône et les couleurs dorées d'Eclipse.
-- S'installe à côté de Moonlight (identifiant `com.eclipse.stream`).
-- Basé sur Moonlight Android 12.2 : streaming, manettes et réglages identiques.
+- Nouvel écran d'accueil **Mes PC** : tes PC apparaissent tout seuls sur le Wi-Fi, avec leur état (en ligne, hors ligne, à connecter).
+- **Connexion simple** : touche « Connecter », tape le code affiché dans Eclipse sur ton PC.
+- **Tes jeux en grand**, avec leurs images. Le jeu en cours peut être repris ou quitté.
+- Allumer un PC à distance, ajouter un PC par son adresse, le retirer.
+- Réglages du streaming et interface Moonlight classique toujours accessibles (roue dentée).
 
-Installe **Eclipse.apk** ci-dessous. Si Android le demande, autorise
-l'installation depuis ton navigateur.
+Installe **Eclipse.apk** ci-dessous, par-dessus la version précédente.

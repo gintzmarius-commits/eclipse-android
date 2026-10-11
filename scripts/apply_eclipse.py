@@ -93,13 +93,57 @@ def accent(t):
 for v in ("values-v21", "values-v29"):
     edit(res / v / "styles.xml", accent)
 
-# 4) Files that replace Moonlight's (icons, launcher background colour).
-overlay = ROOT / "eclipse/res"
-for f in overlay.rglob("*"):
-    if f.is_file():
-        dst = res / f.relative_to(overlay)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(f, dst)
-        print(f"  copied {dst.relative_to(up)}")
+# 4) Eclipse files: resources (icons, colours), the Eclipse home screen
+#    (Java) and its Liquid Glass interface (assets).
+for src_dir, dst_dir in (("eclipse/res", res),
+                         ("eclipse/java", app / "src/main/java"),
+                         ("eclipse/assets", app / "src/main/assets")):
+    overlay = ROOT / src_dir
+    for f in overlay.rglob("*"):
+        if f.is_file():
+            dst = dst_dir / f.relative_to(overlay)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, dst)
+            print(f"  copied {dst.relative_to(up)}")
+
+# 5) The Eclipse screen opens the app; Moonlight's screen stays reachable
+#    from Eclipse's settings ("Interface Moonlight classique").
+ECLIPSE_ACTIVITY = """<activity
+            android:name=".EclipseActivity"
+            android:exported="true"
+            android:resizeableActivity="true"
+            android:enableOnBackInvokedCallback="false"
+            android:theme="@style/EclipseTheme"
+            android:configChanges="mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize|layoutDirection">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+        """
+
+def manifest(t):
+    start = t.index('android:name=".PcView"')
+    a = t.rindex("<activity", 0, start)
+    end = t.index("</activity>", start)
+    block = t[a:end]
+    stripped = re.sub(r"\s*<intent-filter>.*?</intent-filter>", "", block, flags=re.S)
+    if stripped == block:
+        raise SystemExit("apply_eclipse: PcView launcher filter not found")
+    return t[:a] + ECLIPSE_ACTIVITY + stripped + t[end:]
+
+edit(app / "src/main/AndroidManifest.xml", manifest)
+
+# 6) Keep the methods the page calls (R8 would remove them as unused).
+edit(app / "proguard-rules.pro", lambda t: t + """
+# Eclipse: methods called from the interface (window.EclipseNative)
+-keepattributes JavascriptInterface
+-keepclassmembers class com.limelight.EclipseActivity$Bridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+""")
 
 print("Eclipse changes applied.")

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="eclipse_background">#EEF0F7</color>
+    <!-- Eclipse home screen: light, so nothing dark flashes before the page shows. -->
+    <style name="EclipseTheme" parent="@style/AppTheme">
+        <item name="android:windowBackground">@color/eclipse_background</item>
+    </style>
+</resources>
