@@ -518,9 +518,22 @@ public class EclipseActivity extends Activity {
         }
     }
 
+    /** Short technical description of an error (shown under the message). */
+    private static String describe(Throwable e) {
+        StringBuilder b = new StringBuilder(e.getClass().getSimpleName());
+        if (e.getMessage() != null) b.append(": ").append(e.getMessage());
+        StackTraceElement[] st = e.getStackTrace();
+        for (int i = 0; i < Math.min(3, st.length); i++) {
+            b.append(" @ ").append(st[i].getClassName().replaceAll("^.*\\.", "")).append('.').append(st[i].getMethodName());
+        }
+        Throwable c = e.getCause();
+        if (c != null && c != e) b.append(" ← ").append(c.getClass().getSimpleName()).append(": ").append(c.getMessage());
+        return b.toString();
+    }
+
     /** The scanner is downloaded by Google Play the first time: wait for it. */
     private void scanFailed(Exception e) {
-        LimeLog.warning("Eclipse: scanner: " + e);
+        LimeLog.warning("Eclipse: scanner: " + android.util.Log.getStackTraceString(e));
         String m = String.valueOf(e.getMessage()).toLowerCase(java.util.Locale.ROOT);
         boolean downloading = m.contains("download") || m.contains("module") || m.contains("waiting")
                 || m.contains("unavailable") || m.contains("télécharg");
@@ -539,8 +552,8 @@ public class EclipseActivity extends Activity {
         }
         scanTries = 0;
         scanWanted = false;
-        emitQr("error", null, null, "Le scanner ne s'ouvre pas (" + e.getMessage() + "). "
-                + "Vérifie la connexion internet du téléphone, ou vise le QR code avec l'appareil photo.");
+        emitQr("error", null, null, "Le scanner ne s'ouvre pas. Vérifie la connexion internet du téléphone, "
+                + "ou vise le QR code avec l'appareil photo.\n\nDétail : " + describe(e));
     }
 
     private void handleQrText(String raw) {

@@ -69,6 +69,9 @@ jobs:
           cp "$APK" Eclipse.apk
           ls -la Eclipse.apk
 
+      - name: Check the APK (classes created by reflection, signature)
+        run: scripts/ci_run.sh "Vérification de l'APK" python3 scripts/check_apk.py Eclipse.apk "$(cat VERSION)" E4:AD:E3:BA:64:AE:04:E2:D7:B9:9B:0B:19:77:A0:AF:72:F2:80:B9:37:8A:12:FF:50:DD:62:39:00:17:1D:9F
+
       - name: Test build (private draft, never shown as the latest version)
         if: github.ref != 'refs/heads/main'
         env:

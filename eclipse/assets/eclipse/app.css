@@ -125,6 +125,7 @@ svg { width: 22px; height: 22px; flex: none; }
 .txt .wrap { white-space: normal; display: block; line-height: 1.4; }
 .link { border: 0; background: none; font: inherit; font-weight: 600; font-size: 14px; color: var(--accent-text); padding: 10px; border-radius: 12px; }
 .link:active { background: rgba(255, 255, 255, .7); }
+#q-err { white-space: pre-line; }
 .hint { color: var(--accent-text); background: rgba(246, 165, 26, .12); padding: 10px 14px; border-radius: 14px; line-height: 1.4; }
 .pstep .radar svg { width: 30px; height: 30px; }
 

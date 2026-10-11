@@ -214,6 +214,20 @@ edit(app / "proguard-rules.pro", lambda t: t + """
 -keepclassmembers class com.limelight.EclipseActivity$Bridge {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# Eclipse: Google's QR code scanner (ML Kit, Google Play services) creates
+# some of its classes by reflection (the registrars listed in the manifest).
+# With AGP 9, R8 removes their constructors unless told otherwise, and the
+# scanner then fails ("getClass() on a null object reference"): keep it whole.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    <init>(...);
+    *;
+}
+-keep class com.google.firebase.components.** { *; }
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_** { *; }
+-keep class com.google.android.gms.common.moduleinstall.** { *; }
+-keep class com.google.android.datatransport.** { *; }
 """)
 
 print("Eclipse changes applied.")
