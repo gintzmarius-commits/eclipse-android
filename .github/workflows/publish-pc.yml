@@ -1,0 +1,36 @@
+name: Publish a version of Eclipse for PC
+
+# Pushing publish-pc/<anything> (pc/VERSION, pc/NOTES.md and the files built
+# and tested beforehand) publishes them as the release "pc-v<version>",
+# listed in the Versions tab of Eclipse for PC. Marked "pre-release": the
+# repository's latest release stays the phone app (its download link).
+on:
+  push:
+    branches: ["publish-pc/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the files
+        run: |
+          V=$(cat pc/VERSION)
+          DEB=pc/eclipse-stream_${V}_amd64.deb
+          test "$(dpkg-deb -f "$DEB" Package)" = "eclipse-stream"
+          test "$(dpkg-deb -f "$DEB" Version)" = "$V"
+          dpkg-deb -c "$DEB" | grep -q "./usr/bin/eclipse-stream"
+          test -s "pc/Eclipse-Setup-$V.exe"
+          sha256sum pc/*.deb pc/*.exe
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(cat pc/VERSION)
+          gh release delete "pc-v$V" -y --cleanup-tag 2>/dev/null || true
+          gh release create "pc-v$V" "pc/eclipse-stream_${V}_amd64.deb" "pc/Eclipse-Setup-$V.exe" \
+            --target "$GITHUB_SHA" --title "Eclipse PC $V" --notes-file pc/NOTES.md --prerelease --latest=false
+          gh release view "pc-v$V" --json tagName,isPrerelease,assets --jq '{tag: .tagName, pre: .isPrerelease, assets: [.assets[].name]}'
