@@ -143,6 +143,10 @@ jobs:
         if: always()
         run: |
           cat out/result.txt || true
+          if [ -f out/result.txt ]; then
+            sum=$(grep -E "^(FAIL|SMOKE)" out/result.txt | tr '\n' ' ' | cut -c1-900)
+            echo "::notice title=Android API ${{ matrix.api }}::${sum:-pas de résultat}"
+          fi
           tar czf "emulator-api${{ matrix.api }}.tgz" out || true
       - uses: actions/upload-artifact@v4
         if: always()
