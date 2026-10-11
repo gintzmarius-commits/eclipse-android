@@ -79,7 +79,7 @@ const handlers = {
       const uuid = pairing.uuid;
       pairing = null;
       setTimeout(() => {
-        closeSheet("s-pair");
+        closeSheet("s-pair", true);
         openGames(uuid);
       }, 1300);
     } else {
@@ -99,6 +99,9 @@ const handlers = {
   },
   resume() {
     if (current) N.apps(current);
+  },
+  qr(ev) {
+    qrEvent(ev);
   },
 };
 
@@ -134,15 +137,15 @@ function renderPcs() {
 $("#pcs").addEventListener("click", (e) => {
   const t = e.target.closest("[data-pair],[data-wake],[data-menu],[data-open]");
   if (!t) return;
-  if (t.dataset.pair) return startPairing(t.dataset.pair);
+  if (t.dataset.pair) return openConnect(t.dataset.pair);
   if (t.dataset.wake) return N.wake(t.dataset.wake);
   if (t.dataset.menu) return openMenu(t.dataset.menu);
   const p = byUuid(t.dataset.open);
   if (!p) return;
   const st = stateOf(p);
-  if (st === "offline") return toast(p.canWake ? "Ce PC est éteint. Touche « Allumer »." : "Ce PC est éteint ou n'est pas sur ce Wi-Fi.");
+  if (st === "offline") return toast(p.canWake ? "Ce PC est éteint. Touche « Allumer »." : "Ce PC est éteint ou n'est pas sur ce Wi-Fi.");
   if (st === "wait") return toast("Connexion au PC en cours, patiente un instant…");
-  if (!p.paired) return startPairing(p.uuid);
+  if (!p.paired) return openConnect(p.uuid);
   openGames(p.uuid);
 });
 
@@ -251,6 +254,93 @@ function startPairing(uuid) {
 $("#p-retry").onclick = () => pairing && startPairing(pairing.uuid);
 
 // ---------------------------------------------------------------------
+// QR code of Eclipse for PC (the recommended way to connect)
+// ---------------------------------------------------------------------
+let qrHintTimer = null;
+let qrDoneUuid = null;
+
+function scanQr() {
+  closeSheet("s-connect");
+  N.scanQr();
+}
+$("#btn-scan").onclick = scanQr;
+$("#c-scan").onclick = scanQr;
+$("#q-retry").onclick = () => {
+  closeSheet("s-qr");
+  N.scanQr();
+};
+$("#q-cancel").onclick = () => closeSheet("s-qr");
+
+function openConnect(uuid) {
+  const p = byUuid(uuid);
+  if (!p) return;
+  $("#c-name").textContent = p.name;
+  $("#c-name2").textContent = p.name;
+  $("#c-code").onclick = () => {
+    closeSheet("s-connect");
+    startPairing(uuid);
+  };
+  openSheet("s-connect");
+}
+
+function qrStep(id) {
+  for (const s of ["q-busy", "q-done", "q-fail"]) $("#" + s).hidden = s !== id;
+}
+
+function stopQrHint() {
+  clearTimeout(qrHintTimer);
+  qrHintTimer = null;
+  $("#q-hint").hidden = true;
+}
+
+// hintAfter: show the "is the window still open on the PC?" hint after
+// that many ms (the timer keeps running from one step to the next).
+function qrBusy(title, text, hintAfter) {
+  $("#q-title").textContent = title;
+  $("#q-text").textContent = text || "";
+  $("#q-text").hidden = !text;
+  if (!hintAfter) stopQrHint();
+  else if (!qrHintTimer) qrHintTimer = setTimeout(() => ($("#q-hint").hidden = false), hintAfter);
+  qrStep("q-busy");
+  openSheet("s-qr");
+}
+
+function qrEvent(ev) {
+  const name = ev.name || "ton PC";
+  switch (ev.stage) {
+    case "preparing":
+      return qrBusy("Préparation du scanner…", "La première fois, Google Play installe le scanner. Ça prend quelques secondes.");
+    case "cancelled":
+      if (!$("#q-busy").hidden) closeSheet("s-qr", true);
+      return;
+    case "search":
+      return qrBusy(`Recherche de ${name}…`, "Le téléphone doit être sur le même Wi-Fi que le PC.");
+    case "pair":
+      return qrBusy(`Connexion à ${name}…`, "Eclipse sur le PC accepte le téléphone tout seul.", 20000);
+    case "busy":
+      return qrBusy(`Connexion à ${name}…`, "Une autre demande de connexion attend sur le PC. Nouvel essai dans un instant…", 20000);
+    case "done":
+      stopQrHint();
+      $("#q-name").textContent = name;
+      qrStep("q-done");
+      openSheet("s-qr");
+      qrDoneUuid = ev.uuid;
+      setTimeout(() => {
+        if ($("#q-done").hidden || qrDoneUuid !== ev.uuid) return;
+        closeSheet("s-qr", true);
+        if (ev.uuid) openGames(ev.uuid);
+      }, 1400);
+      return;
+    case "error":
+      stopQrHint();
+      $("#q-err").textContent = ev.error || "La connexion a échoué.";
+      qrStep("q-fail");
+      openSheet("s-qr");
+      return;
+  }
+}
+
+// ---------------------------------------------------------------------
 // Add a PC, PC menu, settings
 // ---------------------------------------------------------------------
 $("#btn-add").onclick = () => {
@@ -283,10 +373,10 @@ function openMenu(uuid) {
   openSheet("s-pc");
 }
 $("#m-wake").onclick = () => { closeSheet("s-pc"); N.wake(menuPc); };
-$("#m-pair").onclick = () => { closeSheet("s-pc"); startPairing(menuPc); };
+$("#m-pair").onclick = () => { closeSheet("s-pc"); openConnect(menuPc); };
 $("#m-remove").onclick = () => {
   const p = byUuid(menuPc);
-  if (!confirm(`Retirer « ${p ? p.name : "ce PC"} » ? Il faudra le reconnecter pour jouer.`)) return;
+  if (!confirm(`Retirer « ${p ? p.name : "ce PC"} » ? Il faudra le reconnecter pour jouer.`)) return;
   closeSheet("s-pc");
   N.remove(menuPc);
   if (current === menuPc) closeGames();
@@ -303,9 +393,20 @@ $("#ver").textContent = "Eclipse " + N.version();
 function openSheet(id) {
   $("#" + id).hidden = false;
 }
-function closeSheet(id) {
-  $("#" + id).hidden = true;
-  if (id === "s-pair") pairing = null;
+function closeSheet(id, quiet) {
+  const s = $("#" + id);
+  const wasOpen = !s.hidden;
+  s.hidden = true;
+  if (id === "s-pair" && pairing) {
+    pairing = null;
+    if (wasOpen && !quiet) N.cancelPairing();
+  }
+  if (id === "s-qr") {
+    stopQrHint();
+    qrDoneUuid = null;
+    // Closing while it still works stops it (the scan itself is over).
+    if (wasOpen && !quiet && !$("#q-busy").hidden) N.cancelPairing();
+  }
 }
 for (const b of $$("[data-close]")) b.onclick = () => closeSheet(b.dataset.close);
 for (const s of $$(".sheet")) s.addEventListener("click", (e) => { if (e.target === s) closeSheet(s.id); });
@@ -339,13 +440,22 @@ function demoNative() {
   ];
   const art = (c1, c2) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="300" height="400" fill="url(#g)"/></svg>`);
   return {
-    version: () => "1.1.0 (aperçu)",
+    version: () => "2.0.0 (aperçu)",
     refresh: () => (location.search.includes("empty") ? null : later(() => window.ec.on("computers", list), 600)),
     apps: (u) => later(() => window.ec.on("apps", { uuid: u, running: 2, apps: [
       { id: 1, name: "Desktop" }, { id: 2, name: "Cyberpunk 2077", art: art("#ff6a3d", "#5b2a86") },
       { id: 3, name: "Hades II", art: art("#7a1f2b", "#f2b544") }, { id: 4, name: "Rocket League", art: art("#1e6fd9", "#13c3d1") },
       { id: 5, name: "Steam Big Picture" }, { id: 6, name: "Minecraft", art: art("#3f8f3a", "#8bd06a") } ] })),
     pair: (u) => { later(() => window.ec.on("paired", { uuid: u, ok: true }), 4000); return "4827"; },
+    scanQr: () => {
+      const fail = location.search.includes("qrfail");
+      later(() => window.ec.on("qr", { stage: "search", name: "PC-SALON" }), 300);
+      later(() => window.ec.on("qr", { stage: "pair", name: "PC-SALON", uuid: "b" }), 1500);
+      later(() => window.ec.on("qr", fail
+        ? { stage: "error", name: "PC-SALON", error: "Ce QR code n'est plus valable. Rescanne le QR code affiché sur le PC." }
+        : { stage: "done", name: "PC-SALON", uuid: "b" }), 3500);
+    },
+    cancelPairing: () => {},
     addComputer: () => later(() => window.ec.on("added", { ok: false, error: "Aucun PC ne répond à cette adresse." }), 900),
     play: () => toast("Lancement…"), quit: () => toast("Jeu quitté"), wake: () => toast("Réveil envoyé"),
     remove: () => {}, openSettings: () => {}, openClassic: () => {}, toast: (m) => toast(m),

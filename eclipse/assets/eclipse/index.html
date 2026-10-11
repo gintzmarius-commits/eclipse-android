@@ -25,6 +25,7 @@
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M5 7h9M18 7h1M5 17h3M12 17h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 18.5h2v1.5h-2zM18 14h2v2h-2z" fill="currentColor"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></symbol>
 </svg>
 
@@ -47,6 +48,11 @@
       <div class="radar"><svg><use href="#i-wifi"/></svg><i></i><i></i></div>
       <strong>Recherche de tes PC…</strong>
       <span class="muted small">Ton PC doit être allumé, sur le même Wi-Fi, avec Eclipse ouvert.</span>
+    </div>
+    <div class="panel connect" id="connect">
+      <div class="qr-badge"><svg><use href="#i-qr"/></svg></div>
+      <div class="txt"><strong>Connecter un PC</strong><span class="wrap">Sur le PC, ouvre Eclipse et clique « Connecter un appareil » : un QR code s'affiche.</span></div>
+      <button class="btn primary wide" id="btn-scan"><svg><use href="#i-qr"/></svg>Scanner le QR code</button>
     </div>
     <button class="btn wide" id="btn-add"><svg><use href="#i-plus"/></svg>Ajouter un PC avec son adresse</button>
   </section>
@@ -77,7 +83,7 @@
     <div class="grab"></div>
     <div class="pstep" id="p-wait">
       <h2>Connexion à <span id="p-name"></span></h2>
-      <p class="muted">Sur <b id="p-name2"></b>, ouvre Eclipse, touche <b>Connecter un appareil</b> et tape ce code :</p>
+      <p class="muted">Sur <b id="p-name2"></b>, ouvre Eclipse, clique <b>Connecter un appareil</b>, puis tape ce code quand il est demandé :</p>
       <div class="pin-show" id="p-code"></div>
       <p class="small status-line"><span class="spin"></span>En attente du PC…</p>
       <button class="btn wide" data-close="s-pair">Annuler</button>
@@ -91,6 +97,44 @@
       <h2>Ça n'a pas marché</h2>
       <p class="err" id="p-err"></p>
       <div class="row center"><button class="btn" data-close="s-pair">Fermer</button><button class="btn primary" id="p-retry">Réessayer</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Connecting a PC found on the Wi-Fi -->
+<div class="sheet" id="s-connect" hidden>
+  <div class="panel card">
+    <div class="grab"></div>
+    <div class="pstep">
+      <div class="qr-badge big"><svg><use href="#i-qr"/></svg></div>
+      <h2>Connecter <span id="c-name"></span></h2>
+      <p class="muted">Sur <b id="c-name2"></b>, ouvre Eclipse et clique <b>Connecter un appareil</b> : un QR code s'affiche. Scanne-le.</p>
+      <button class="btn primary wide" id="c-scan"><svg><use href="#i-qr"/></svg>Scanner le QR code</button>
+      <button class="link" id="c-code">Pas de QR code sur le PC ? Utiliser un code à 4 chiffres</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR code pairing -->
+<div class="sheet" id="s-qr" hidden>
+  <div class="panel card">
+    <div class="grab"></div>
+    <div class="pstep" id="q-busy">
+      <div class="radar"><svg><use href="#i-desktop"/></svg><i></i><i></i></div>
+      <h2 id="q-title">Connexion…</h2>
+      <p class="muted" id="q-text"></p>
+      <p class="small hint" id="q-hint" hidden>Vérifie que la fenêtre <b>Connecter un appareil</b> est toujours ouverte sur le PC. Sinon, rouvre-la et rescanne le code.</p>
+      <button class="btn wide" id="q-cancel">Annuler</button>
+    </div>
+    <div class="pstep" id="q-done" hidden>
+      <div class="ok"><svg><use href="#i-check"/></svg></div>
+      <h2>C'est connecté !</h2>
+      <p class="muted">Tu peux jouer aux jeux de <b id="q-name"></b>.</p>
+    </div>
+    <div class="pstep" id="q-fail" hidden>
+      <h2>Ça n'a pas marché</h2>
+      <p class="err" id="q-err"></p>
+      <div class="row center"><button class="btn" data-close="s-qr">Fermer</button><button class="btn primary" id="q-retry"><svg><use href="#i-qr"/></svg>Rescanner</button></div>
     </div>
   </div>
 </div>

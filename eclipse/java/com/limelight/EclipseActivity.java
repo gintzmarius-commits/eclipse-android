@@ -24,11 +24,21 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.moduleinstall.ModuleInstall;
+import com.google.android.gms.common.moduleinstall.ModuleInstallClient;
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest;
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.binding.crypto.AndroidCryptoProvider;
 import com.limelight.computers.ComputerManagerListener;
 import com.limelight.computers.ComputerManagerService;
 import com.limelight.nvstream.http.ComputerDetails;
+import com.limelight.nvstream.http.HostHttpResponseException;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
 import com.limelight.nvstream.http.PairingManager;
@@ -44,6 +54,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
@@ -52,6 +63,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -73,6 +85,15 @@ public class EclipseActivity extends Activity {
     private final Map<String, String> boxArt = new ConcurrentHashMap<>();
     private final ExecutorService artLoader = Executors.newFixedThreadPool(2);
 
+    // Pairing (QR code or 4-digit code): one at a time; a newer one, or
+    // "Annuler", makes the older one stop quietly.
+    private final ExecutorService pairExec = Executors.newSingleThreadExecutor();
+    private final AtomicInteger pairJob = new AtomicInteger();
+    private volatile NvHTTP pairHttp;
+    private String pendingQr; // QR code opened before Eclipse was ready (eclipse://pair link)
+    private int scanTries;
+    private boolean scanWanted; // the user asked for the scanner and did not cancel
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder binder) {
             final ComputerManagerService.ComputerManagerBinder localBinder =
@@ -86,6 +107,7 @@ public class EclipseActivity extends Activity {
                         @Override
                         public void run() {
                             startUpdates();
+                            runPendingQr();
                         }
                     });
                     // Generating the key pair early avoids delays when pairing.
@@ -107,6 +129,10 @@ public class EclipseActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         inForeground = true;
+        EclipsePairing.init(this);
+        if (savedInstanceState == null) {
+            takeQrLink(getIntent());
+        }
 
         // Like Moonlight's home screen: remember the GPU name once, the video
         // decoder settings depend on it.
@@ -171,6 +197,7 @@ public class EclipseActivity extends Activity {
                 pageReady = true;
                 pushInsets();
                 pushComputers();
+                runPendingQr();
             }
         });
         web.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -189,6 +216,7 @@ public class EclipseActivity extends Activity {
 
         bindService(new Intent(this, ComputerManagerService.class), serviceConnection,
                 Service.BIND_AUTO_CREATE);
+        prepareScanner();
     }
 
     /** Draw behind the status and navigation bars, with dark icons. */
@@ -238,9 +266,18 @@ public class EclipseActivity extends Activity {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        takeQrLink(intent);
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         artLoader.shutdownNow();
+        pairJob.incrementAndGet();
+        cancelPairHttp();
+        pairExec.shutdownNow();
         if (managerBinder != null) {
             unbindService(serviceConnection);
         }
@@ -408,6 +445,378 @@ public class EclipseActivity extends Activity {
     }
 
     // ------------------------------------------------------------------
+    // QR code pairing (Eclipse 2.0)
+    // ------------------------------------------------------------------
+
+    /** A QR code read by the phone's camera app opens eclipse://pair?... */
+    private void takeQrLink(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null
+                || !"eclipse".equalsIgnoreCase(intent.getData().getScheme())) {
+            return;
+        }
+        pendingQr = intent.getData().toString();
+        setIntent(new Intent(this, EclipseActivity.class)); // not again after a rotation
+        runPendingQr();
+    }
+
+    private void runPendingQr() {
+        if (pendingQr != null && pageReady && managerBinder != null) {
+            String raw = pendingQr;
+            pendingQr = null;
+            handleQrText(raw);
+        }
+    }
+
+    private boolean playServicesOk() {
+        try {
+            return GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Downloads Google's scanner in advance (it is not inside the app). */
+    private void prepareScanner() {
+        try {
+            if (!playServicesOk()) return;
+            ModuleInstallClient installer = ModuleInstall.getClient(this);
+            installer.installModules(ModuleInstallRequest.newBuilder()
+                            .addApi(GmsBarcodeScanning.getClient(this)).build())
+                    .addOnFailureListener(e -> LimeLog.warning("Eclipse: scanner not installed yet: " + e));
+        } catch (Throwable t) {
+            LimeLog.warning("Eclipse: scanner preparation failed: " + t);
+        }
+    }
+
+    /** Opens Google's QR code scanner (no camera permission needed). UI thread. */
+    private void scanQr() {
+        if (!playServicesOk()) {
+            emitQr("error", null, null, "Le scanner a besoin des services Google Play, absents de ce téléphone. "
+                    + "Vise plutôt le QR code avec l'appareil photo du téléphone, ou utilise « Connecter » sur la carte de ton PC.");
+            return;
+        }
+        try {
+            GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                    .enableAutoZoom()
+                    .build();
+            GmsBarcodeScanner scanner = GmsBarcodeScanning.getClient(this, options);
+            scanner.startScan()
+                    .addOnSuccessListener(barcode -> {
+                        scanTries = 0;
+                        scanWanted = false;
+                        handleQrText(barcode.getRawValue());
+                    })
+                    .addOnCanceledListener(() -> {
+                        scanTries = 0;
+                        scanWanted = false;
+                        emitQr("cancelled", null, null, null);
+                    })
+                    .addOnFailureListener(this::scanFailed);
+        } catch (Throwable t) {
+            scanFailed(t instanceof Exception ? (Exception) t : new Exception(t));
+        }
+    }
+
+    /** The scanner is downloaded by Google Play the first time: wait for it. */
+    private void scanFailed(Exception e) {
+        LimeLog.warning("Eclipse: scanner: " + e);
+        String m = String.valueOf(e.getMessage()).toLowerCase(java.util.Locale.ROOT);
+        boolean downloading = m.contains("download") || m.contains("module") || m.contains("waiting")
+                || m.contains("unavailable") || m.contains("télécharg");
+        if (scanTries < (downloading ? 12 : 2)) {
+            if (scanTries == 0) prepareScanner();
+            scanTries++;
+            emitQr("preparing", null, null, null);
+            web.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (inForeground && scanWanted) scanQr();
+                    else scanTries = 0;
+                }
+            }, 2500);
+            return;
+        }
+        scanTries = 0;
+        scanWanted = false;
+        emitQr("error", null, null, "Le scanner ne s'ouvre pas (" + e.getMessage() + "). "
+                + "Vérifie la connexion internet du téléphone, ou vise le QR code avec l'appareil photo.");
+    }
+
+    private void handleQrText(String raw) {
+        final EclipseQr q;
+        try {
+            q = EclipseQr.parse(raw);
+        } catch (EclipseQr.Invalid e) {
+            String msg;
+            switch (e.reason) {
+                case "app-link":
+                    msg = "Ce QR code sert à télécharger Eclipse. Sur le PC, clique plutôt « Connecter un appareil » et scanne le code affiché.";
+                    break;
+                case "newer":
+                    msg = "Ce QR code vient d'une version plus récente d'Eclipse : mets à jour l'appli Eclipse de ce téléphone.";
+                    break;
+                case "damaged":
+                    msg = "Ce QR code est incomplet. Rescanne-le, bien en face de l'écran du PC.";
+                    break;
+                default:
+                    msg = "Ce QR code ne vient pas d'Eclipse. Sur le PC, ouvre Eclipse et clique « Connecter un appareil ».";
+            }
+            emitQr("error", null, null, msg);
+            return;
+        }
+        final int job = pairJob.incrementAndGet();
+        cancelPairHttp();
+        emitQr("search", q.name, null, null);
+        pairExec.submit(new Runnable() {
+            @Override
+            public void run() {
+                runQrPairing(q, job);
+            }
+        });
+    }
+
+    private boolean superseded(int job) {
+        return job != pairJob.get();
+    }
+
+    private void cancelPairHttp() {
+        NvHTTP h = pairHttp;
+        if (h != null) {
+            h.eclipseCancel();
+        }
+    }
+
+    private ComputerManagerService.ComputerManagerBinder waitBinder() throws InterruptedException {
+        for (int i = 0; i < 100 && managerBinder == null; i++) {
+            Thread.sleep(100);
+        }
+        return managerBinder;
+    }
+
+    private void runQrPairing(EclipseQr q, int job) {
+        String name = q.name.isEmpty() ? "ton PC" : q.name;
+        boolean stopped = false;
+        try {
+            ComputerManagerService.ComputerManagerBinder mb = waitBinder();
+            if (mb == null) {
+                emitQr("error", name, null, "Eclipse démarre encore. Réessaie dans un instant.");
+                return;
+            }
+
+            // 1. Find the PC: already known, or at one of its addresses.
+            ComputerDetails target = null;
+            if (!q.id.isEmpty()) {
+                for (ComputerDetails c : computers.values()) {
+                    if (q.id.equalsIgnoreCase(c.uuid) && c.state == ComputerDetails.State.ONLINE && c.activeAddress != null) {
+                        target = c;
+                    }
+                }
+            }
+            boolean otherPc = false;
+            if (target == null) {
+                for (String addr : q.addresses) {
+                    if (superseded(job)) return;
+                    ComputerDetails d = new ComputerDetails();
+                    d.manualAddress = new ComputerDetails.AddressTuple(addr, q.port);
+                    if (!mb.addComputerBlocking(d) || d.uuid == null || d.activeAddress == null) {
+                        continue;
+                    }
+                    if (!q.id.isEmpty() && !q.id.equalsIgnoreCase(d.uuid)) {
+                        otherPc = true;
+                        continue;
+                    }
+                    target = d;
+                    break;
+                }
+            }
+            if (superseded(job)) return;
+            if (target == null) {
+                emitQr("error", name, null, otherPc
+                        ? "Un autre PC répond à l'adresse de ce QR code. Rescanne le code affiché sur " + name + "."
+                        : "Le téléphone ne trouve pas " + name + ". Vérifie qu'il est sur le même Wi-Fi que le PC, et que Sunshine est démarré dans Eclipse sur le PC.");
+                return;
+            }
+            if (target.name != null && !target.name.isEmpty()) name = target.name;
+            computers.put(target.uuid, target);
+            pushComputers();
+
+            // 2. Pair, with the PIN of the QR code and its token in our name.
+            emitQr("pair", name, target.uuid, null);
+            stopUpdates(true);
+            stopped = true;
+            NvHTTP h = http(target);
+            pairHttp = h;
+            if (superseded(job)) return;
+            if (h.getPairState() == PairState.PAIRED) {
+                qrPaired(target, name, job);
+                return;
+            }
+            PairingManager pm = h.getPairingManager();
+            String serverInfo = h.getServerInfo(true);
+            EclipsePairing.setToken(q.token);
+            long until = System.currentTimeMillis() + 60000;
+            PairState st;
+            while (true) {
+                try {
+                    st = pm.pair(serverInfo, q.pin);
+                    break;
+                } catch (HostHttpResponseException e) {
+                    // Another device is pairing with this PC: wait for it.
+                    boolean busy = e.getErrorCode() == 409 || e.getErrorCode() == 503;
+                    if (!busy || System.currentTimeMillis() > until || superseded(job)) throw e;
+                    emitQr("busy", name, target.uuid, null);
+                    Thread.sleep(3000);
+                    if (superseded(job)) return;
+                    emitQr("pair", name, target.uuid, null);
+                }
+            }
+            if (superseded(job)) return;
+            if (st == PairState.PAIRED) {
+                ComputerDetails live = mb.getComputer(target.uuid);
+                if (live != null) live.serverCert = pm.getPairedCert();
+                target.serverCert = pm.getPairedCert();
+                mb.invalidateStateForComputer(target.uuid);
+                qrPaired(target, name, job);
+            } else {
+                emitQr("error", name, target.uuid, st == PairState.PIN_WRONG
+                        ? "Le code ne correspond plus. Rescanne le QR code affiché sur le PC."
+                        : st == PairState.ALREADY_IN_PROGRESS ? "Une autre connexion est en cours sur ce PC. Réessaie dans un instant."
+                        : target.runningGameId != 0 ? "Quitte le jeu en cours sur le PC, puis réessaie."
+                        : "La connexion a échoué. Rescanne le QR code affiché sur le PC.");
+            }
+        } catch (Exception e) {
+            if (!superseded(job)) {
+                emitQr("error", name, null, pairError(e, true));
+            }
+        } finally {
+            EclipsePairing.clearToken();
+            pairHttp = null;
+            if (stopped) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        startUpdates();
+                    }
+                });
+            }
+        }
+    }
+
+    /** Pairing with a 4-digit code shown here and typed on the PC. */
+    private void runCodePairing(String uuid, String pin, int job) {
+        JSONObject ev = new JSONObject();
+        boolean stopped = false;
+        try {
+            ev.put("uuid", uuid);
+            ComputerDetails c = computers.get(uuid);
+            if (c == null || managerBinder == null || c.activeAddress == null) {
+                ev.put("ok", false);
+                ev.put("error", "Ce PC n'est pas joignable. Vérifie qu'il est allumé.");
+            } else {
+                stopUpdates(true);
+                stopped = true;
+                NvHTTP h = http(c);
+                pairHttp = h;
+                if (h.getPairState() == PairState.PAIRED) {
+                    ev.put("ok", true);
+                } else {
+                    PairingManager pm = h.getPairingManager();
+                    EclipsePairing.setToken("");
+                    PairState st = pm.pair(h.getServerInfo(true), pin);
+                    if (st == PairState.PAIRED) {
+                        ComputerDetails live = managerBinder.getComputer(c.uuid);
+                        if (live != null) live.serverCert = pm.getPairedCert();
+                        c.serverCert = pm.getPairedCert();
+                        c.pairState = PairState.PAIRED;
+                        managerBinder.invalidateStateForComputer(c.uuid);
+                        ev.put("ok", true);
+                    } else {
+                        ev.put("ok", false);
+                        ev.put("error", st == PairState.PIN_WRONG ? "Le code tapé sur le PC n'était pas le bon. Réessaie."
+                                : st == PairState.ALREADY_IN_PROGRESS ? "Une connexion est déjà en cours sur ce PC."
+                                : c.runningGameId != 0 ? "Quitte le jeu en cours sur le PC, puis réessaie."
+                                : "La connexion a échoué.");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            try {
+                ev.put("ok", false);
+                ev.put("error", pairError(e, false));
+            } catch (JSONException ignored) {
+            }
+        } finally {
+            EclipsePairing.clearToken();
+            pairHttp = null;
+            if (stopped) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        startUpdates();
+                    }
+                });
+            }
+        }
+        if (!superseded(job)) {
+            emit("paired", ev.toString());
+            pushComputers();
+        }
+    }
+
+    private void qrPaired(ComputerDetails target, String name, int job) {
+        if (superseded(job)) return;
+        target.pairState = PairState.PAIRED;
+        computers.put(target.uuid, target);
+        pushComputers();
+        emitQr("done", name, target.uuid, null);
+    }
+
+    /** Explains a pairing failure simply. */
+    private static String pairError(Exception e, boolean qr) {
+        String again = qr ? " Rescanne le QR code affiché sur le PC." : " Réessaie.";
+        if (e instanceof HostHttpResponseException) {
+            int code = ((HostHttpResponseException) e).getErrorCode();
+            switch (code) {
+                case 400:
+                    return qr ? "Ce QR code n'est plus valable." + again : "Le PC a refusé la demande." + again;
+                case 404:
+                    return qr ? "Le PC a refusé la connexion." + again : "Le code tapé sur le PC n'était pas le bon." + again;
+                case 408:
+                    return "Le PC n'a pas répondu à temps. Sur le PC, clique « Connecter un appareil »" + (qr ? " et rescanne le code." : ", puis réessaie.");
+                case 409:
+                case 503:
+                    return "Une autre demande de connexion attend sur le PC. Sur le PC, refuse-la dans « Connecter un appareil », puis réessaie.";
+                case 401:
+                    return "Le PC n'a pas confirmé la connexion." + again;
+                default:
+                    return "Le PC a répondu : " + ((HostHttpResponseException) e).getErrorMessage() + "." + again;
+            }
+        }
+        if (e instanceof FileNotFoundException) {
+            return qr ? "Le PC a refusé la connexion." + again : "Le code tapé sur le PC n'était pas le bon." + again;
+        }
+        if (e instanceof java.net.UnknownHostException || e instanceof java.net.ConnectException
+                || e instanceof java.net.SocketTimeoutException || e instanceof java.net.NoRouteToHostException) {
+            return "Le PC ne répond plus. Vérifie qu'il est allumé et sur le même Wi-Fi.";
+        }
+        String m = e.getMessage();
+        return "La connexion a échoué (" + (m == null ? e.getClass().getSimpleName() : m) + ")." + again;
+    }
+
+    private void emitQr(String stage, String name, String uuid, String error) {
+        try {
+            JSONObject ev = new JSONObject();
+            ev.put("stage", stage);
+            if (name != null) ev.put("name", name);
+            if (uuid != null) ev.put("uuid", uuid);
+            if (error != null) ev.put("error", error);
+            emit("qr", ev.toString());
+        } catch (JSONException ignored) {
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Talking to the page
     // ------------------------------------------------------------------
 
@@ -500,55 +909,41 @@ public class EclipseActivity extends Activity {
         @JavascriptInterface
         public String pair(final String uuid) {
             final String pin = PairingManager.generatePinString();
-            new Thread() {
+            final int job = pairJob.incrementAndGet();
+            cancelPairHttp();
+            pairExec.submit(new Runnable() {
                 @Override
                 public void run() {
-                    JSONObject ev = new JSONObject();
-                    try {
-                        ev.put("uuid", uuid);
-                        ComputerDetails c = computers.get(uuid);
-                        if (c == null || managerBinder == null || c.activeAddress == null) {
-                            ev.put("ok", false);
-                            ev.put("error", "Ce PC n'est pas joignable. Vérifie qu'il est allumé.");
-                        } else {
-                            stopUpdates(true);
-                            NvHTTP h = http(c);
-                            if (h.getPairState() == PairState.PAIRED) {
-                                ev.put("ok", true);
-                            } else {
-                                PairingManager pm = h.getPairingManager();
-                                PairState st = pm.pair(h.getServerInfo(true), pin);
-                                if (st == PairState.PAIRED) {
-                                    ComputerDetails live = managerBinder.getComputer(c.uuid);
-                                    if (live != null) live.serverCert = pm.getPairedCert();
-                                    managerBinder.invalidateStateForComputer(c.uuid);
-                                    ev.put("ok", true);
-                                } else {
-                                    ev.put("ok", false);
-                                    ev.put("error", st == PairState.PIN_WRONG ? "Code incorrect."
-                                            : st == PairState.ALREADY_IN_PROGRESS ? "Une connexion est déjà en cours sur ce PC."
-                                            : c.runningGameId != 0 ? "Quitte le jeu en cours sur le PC, puis réessaie."
-                                            : "La connexion a échoué.");
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        try {
-                            ev.put("ok", false);
-                            ev.put("error", e.getMessage() == null ? e.toString() : e.getMessage());
-                        } catch (JSONException ignored) {
-                        }
-                    }
-                    emit("paired", ev.toString());
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            startUpdates();
-                        }
-                    });
+                    runCodePairing(uuid, pin, job);
                 }
-            }.start();
+            });
             return pin;
+        }
+
+        /** Opens the QR code scanner. */
+        @JavascriptInterface
+        public void scanQr() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    scanTries = 0;
+                    scanWanted = true;
+                    EclipseActivity.this.scanQr();
+                }
+            });
+        }
+
+        /** Stops the pairing in progress (QR code or 4-digit code). */
+        @JavascriptInterface
+        public void cancelPairing() {
+            pairJob.incrementAndGet();
+            cancelPairHttp();
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    scanWanted = false;
+                }
+            });
         }
 
         @JavascriptInterface

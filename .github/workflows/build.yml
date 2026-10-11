@@ -2,14 +2,15 @@ name: Build Eclipse APK
 
 on:
   push:
-    branches: [main]
+    # main publishes the APK; dev/... branches make a private test build
+    branches: [main, "dev/**"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-apk
+  group: build-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,6 +20,11 @@ jobs:
     steps:
       - name: Eclipse sources
         uses: actions/checkout@v5
+
+      - name: Eclipse tests (QR code reading)
+        run: |
+          mkdir -p /tmp/t
+          scripts/ci_run.sh "Tests Eclipse" bash -c "javac -encoding UTF-8 -d /tmp/t eclipse/java/com/limelight/EclipseQr.java tests/EclipseQrTest.java && java -Dstdout.encoding=UTF-8 -cp /tmp/t EclipseQrTest"
 
       - name: Moonlight sources (commit from upstream.txt)
         run: |
@@ -57,14 +63,27 @@ jobs:
           ECLIPSE_KEYSTORE_PASSWORD: eclipse-public-key
         run: ../scripts/ci_run.sh "Compilation" ./gradlew --no-daemon --stacktrace assembleNonRootRelease
 
+      - name: The APK
+        run: |
+          APK=$(ls moonlight/app/build/outputs/apk/nonRoot/release/*.apk | head -1)
+          cp "$APK" Eclipse.apk
+          ls -la Eclipse.apk
+
+      - name: Test build (private draft, never shown as the latest version)
+        if: github.ref != 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete test-build -y --cleanup-tag 2>/dev/null || true
+          gh release create test-build Eclipse.apk --draft --prerelease \
+            --title "Build de test ($(cat VERSION), ${GITHUB_SHA::7})" --notes "Build de test, pas une version publiée."
+
       - name: Publish the APK
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(cat VERSION)
-          APK=$(ls moonlight/app/build/outputs/apk/nonRoot/release/*.apk | head -1)
-          cp "$APK" Eclipse.apk
-          ls -la Eclipse.apk
           gh release delete "v$VERSION" -y --cleanup-tag 2>/dev/null || true
           gh release create "v$VERSION" Eclipse.apk \
             --title "Eclipse $VERSION" --notes-file RELEASE_NOTES.md --latest

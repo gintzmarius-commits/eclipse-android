@@ -52,6 +52,8 @@ def gradle(t):
     t = must_sub(r'resValue "string", "app_label_root", "Moonlight \(Root\)"', 'resValue "string", "app_label_root", "Eclipse (Root)"', t)
     t = must_sub(r'versionName "[^"]*"', f'versionName "{version}"', t, count=1)
     t = must_sub(r'versionCode = \d+', f'versionCode = {version_code}', t, count=1)
+    # Google's QR code scanner needs Android 6 or newer.
+    t = must_sub(r'minSdk 21\b', 'minSdk 23', t, count=1)
     # Signing: one stable key, so each new APK installs over the previous one.
     t += '''
 
@@ -71,10 +73,24 @@ android {
         }
     }
 }
+
+// ---- Eclipse: QR code scanner (Google Play services, no camera permission) ----
+dependencies {
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+    implementation 'com.google.android.gms:play-services-base:18.5.0'
+}
 '''
     return t
 
 edit(app / "build.gradle", gradle)
+
+# Google Play services libraries are AndroidX libraries.
+def gradle_props(t):
+    if "android.useAndroidX" in t:
+        return t + "\n# Eclipse\n"
+    return t.rstrip("\n") + "\n\n# Eclipse: Google's QR code scanner uses AndroidX\nandroid.useAndroidX=true\n"
+
+edit(up / "gradle.properties", gradle_props)
 
 # 2) Texts: say "Eclipse" where the app talks about itself (English + French).
 def rename(t):
@@ -106,6 +122,47 @@ for src_dir, dst_dir in (("eclipse/res", res),
             shutil.copyfile(f, dst)
             print(f"  copied {dst.relative_to(up)}")
 
+# 4b) Pairing: the phone tells its real name to the PC (Moonlight sends
+#     "roth"), with the token of the QR code when there is one; a pairing
+#     waiting for the PC can be stopped.
+http = app / "src/main/java/com/limelight/nvstream/http/NvHTTP.java"
+def nvhttp(t):
+    t = must_sub(r'"devicename=roth&', '"devicename=" + com.limelight.EclipsePairing.deviceName() + "&', t)
+    if t.count("com.limelight.EclipsePairing.deviceName()") != 2:
+        raise SystemExit("apply_eclipse: expected 2 pairing requests in NvHTTP")
+    return must_sub(r'(\n    public HttpUrl getHttpsUrl\(boolean likelyOnline\))', r"""
+    // Eclipse: stops the requests of this connection (a pairing waiting for the PC).
+    public void eclipseCancel() {
+        httpClientLongConnectTimeout.dispatcher().cancelAll();
+    }
+\1""", t, count=1)
+
+edit(http, nvhttp)
+
+#     Sunshine 2026.914 refuses for a moment a phone that pairs again (it
+#     keeps two records of it until Eclipse on the PC removes the old one):
+#     the last pairing step is retried for a few seconds.
+pm = app / "src/main/java/com/limelight/nvstream/http/PairingManager.java"
+edit(pm, lambda t: must_sub(
+    r'(        // Do the initial challenge \(seems necessary for us to show as paired\)\n)        String pairChallenge = http\.executePairingChallenge\(\);\n',
+    r"""\1        String pairChallenge;
+        for (int eclipseTry = 0; ; eclipseTry++) {
+            try {
+                pairChallenge = http.executePairingChallenge();
+                break;
+            } catch (HostHttpResponseException e) {
+                if (e.getErrorCode() != 401 || eclipseTry >= 6) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ie) {
+                    throw new InterruptedIOException();
+                }
+            }
+        }
+""", t, count=1))
+
 # 5) The Eclipse screen opens the app; Moonlight's screen stays reachable
 #    from Eclipse's settings ("Interface Moonlight classique").
 ECLIPSE_ACTIVITY = """<activity
@@ -113,6 +170,7 @@ ECLIPSE_ACTIVITY = """<activity
             android:exported="true"
             android:resizeableActivity="true"
             android:enableOnBackInvokedCallback="false"
+            android:launchMode="singleTop"
             android:theme="@style/EclipseTheme"
             android:configChanges="mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize|layoutDirection">
             <intent-filter>
@@ -122,7 +180,19 @@ ECLIPSE_ACTIVITY = """<activity
                 <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- QR code of Eclipse for PC read by the camera app -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="eclipse" android:host="pair" />
+            </intent-filter>
         </activity>
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
         """
 
 def manifest(t):

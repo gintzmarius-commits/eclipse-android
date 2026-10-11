@@ -14,6 +14,15 @@ Joue sur ton téléphone aux jeux de ton PC. Eclipse pour Android va avec
 Eclipse s'installe **à côté** de Moonlight : les deux peuvent cohabiter.
 Chaque nouvelle version s'installe par-dessus la précédente.
 
+## Connecter un PC (version 2.0)
+
+1. Sur le PC, ouvre Eclipse et clique **Connecter un appareil** : un QR code s'affiche.
+2. Dans Eclipse sur le téléphone, touche **Scanner le QR code** et vise l'écran.
+
+C'est tout : le PC accepte le téléphone tout seul. Sans QR code (Eclipse 1.x
+sur le PC, ou Sunshine seul), touche **Connecter** sur la carte du PC et tape
+sur le PC le code à 4 chiffres affiché par le téléphone.
+
 ## Comment c'est fabriqué
 
 Eclipse est basé sur [Moonlight Android](https://github.com/moonlight-stream/moonlight-android).
@@ -25,10 +34,13 @@ Ce dépôt ne contient que ce qu'Eclipse change :
 | `VERSION` | Version d'Eclipse |
 | `scripts/apply_eclipse.py` | Applique les changements d'Eclipse (nom, identifiant, couleurs, textes) |
 | `eclipse/res/` | Fichiers qui remplacent ceux de Moonlight (icônes…) |
+| `eclipse/java/`, `eclipse/assets/` | L'écran Eclipse (Liquid Glass) et la connexion par QR code |
+| `tests/` | Tests lancés avant chaque compilation |
 | `.github/workflows/build.yml` | Fabrique l'APK sur GitHub à chaque modification |
 
-À chaque modification envoyée sur `main`, GitHub télécharge Moonlight,
+À chaque modification envoyée sur `main`, GitHub teste, télécharge Moonlight,
 applique les changements, compile l'APK et le publie dans **Releases**.
+Les branches `dev/…` font une compilation d'essai, en brouillon privé.
 
 ### Clé de signature
 
