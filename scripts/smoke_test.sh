@@ -43,13 +43,21 @@ shot() {
   adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null
   dump "$1"
 }
-# tap <text>: taps the first thing on screen showing that text
+# tap <text>: taps the first thing on screen showing that text (once it
+# stopped moving: sheets slide in)
 tap() {
-  dump tap
-  local xy
-  xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1") || { note "  (pas trouvé à l'écran : $1)"; return 1; }
+  local xy prev="" i
+  for i in 1 2 3 4 5; do
+    dump tap
+    xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1") || xy=""
+    [ -n "$xy" ] && [ "$xy" = "$prev" ] && break
+    prev=$xy
+    sleep 0.7
+  done
+  [ -z "$xy" ] && { note "  (pas trouvé à l'écran : $1)"; return 1; }
   adb shell input tap $xy
   note "  tap « $1 »"
+  sleep 0.5
 }
 # wait_text <text> <seconds>: until that text is on screen
 wait_text() {
@@ -117,6 +125,8 @@ for i in $(seq 1 90); do
 done
 note "système prêt (charge $(adb shell cat /proc/loadavg | cut -d' ' -f1))"
 adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1
+# Some images have a second test browser: links would open a chooser.
+adb shell pm disable-user --user 0 org.chromium.webview_shell > /dev/null 2>&1
 adb shell wm dismiss-keyguard > /dev/null 2>&1
 
 if [ -n "$ABI" ]; then
