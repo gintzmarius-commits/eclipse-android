@@ -230,10 +230,14 @@ check(not bad, "toutes présentes avec leur constructeur")
 
 eca = [a for t, n, a in ev if t == "start" and n == "activity" and str(a.get("name", "")).endswith("EclipseActivity")]
 check(len(eca) == 1, "écran Eclipse")
+tp = [a for t, n, a in ev if t == "start" and n == "provider" and str(a.get("name", "")).endswith("EclipseTunnelProvider")]
+check(len(tp) == 1 and tp[0].get("process") == ":tunnel" and tp[0].get("exported") in (False, "false"),
+      f"Tailscale intégré dans son propre processus, non exporté ({tp[0] if tp else 'absent'})")
 check(any(t == "start" and n == "data" and a.get("scheme") == "eclipse" and a.get("host") == "pair" for t, n, a in ev), "liens eclipse://pair")
 
 print("== Code et interface")
 check("lib/arm64-v8a/libgojni.so" in names, "Tailscale intégré (arm64)")
+check(not [n for n in names if n.endswith("libgojni.so") and not n.startswith("lib/arm64-v8a/")], "Tailscale intégré pour arm64 seulement (APK léger)")
 check("Leclipsenet/Eclipsenet;" in methods and "forward(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V" in methods["Leclipsenet/Eclipsenet;"], "pont vers le Tailscale intégré")
 check("Lgo/Seq;" in methods, "moteur gomobile gardé")
 check("Lcom/limelight/EclipseActivity$Bridge;" in methods and "scanQr()V" in methods["Lcom/limelight/EclipseActivity$Bridge;"], "pont scanQr")

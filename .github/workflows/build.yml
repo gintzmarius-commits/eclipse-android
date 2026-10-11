@@ -25,6 +25,11 @@ jobs:
         run: |
           mkdir -p /tmp/t
           scripts/ci_run.sh "Tests Eclipse" bash -c "javac -encoding UTF-8 -d /tmp/t eclipse/java/com/limelight/EclipseQr.java tests/EclipseQrTest.java && java -Dstdout.encoding=UTF-8 -cp /tmp/t EclipseQrTest"
+          # The Go library may only be loaded in the built-in Tailscale's own
+          # process (EclipseTunnelProvider): a failure there must never close Eclipse.
+          if grep -rl "eclipsenet\." eclipse/java | grep -v EclipseTunnelProvider.java; then
+            echo "::error::Seul EclipseTunnelProvider peut appeler la bibliothèque Go"; exit 1
+          fi
 
       - name: Moonlight sources (commit from upstream.txt)
         run: |
@@ -81,27 +86,104 @@ jobs:
       - name: Check the APK (classes created by reflection, signature)
         run: scripts/ci_run.sh "Vérification de l'APK" python3 scripts/check_apk.py Eclipse.apk "$(cat VERSION)" E4:AD:E3:BA:64:AE:04:E2:D7:B9:9B:0B:19:77:A0:AF:72:F2:80:B9:37:8A:12:FF:50:DD:62:39:00:17:1D:9F
 
+      # Same app, with the built-in Tailscale also for x86_64: the Android
+      # emulator (x86_64) can then run it for real (only the packaging
+      # differs; the code is the one of Eclipse.apk).
+      - name: Emulator build
+        working-directory: moonlight
+        env:
+          ECLIPSE_KEYSTORE: ${{ github.workspace }}/signing/eclipse.keystore
+          ECLIPSE_KEYSTORE_PASSWORD: eclipse-public-key
+        run: |
+          ../scripts/ci_run.sh "Compilation (émulateur)" ./gradlew --no-daemon assembleNonRootRelease -PeclipseEmulator=true
+          cp "$(ls app/build/outputs/apk/nonRoot/release/*.apk | head -1)" ../Eclipse-emulator.apk
+          unzip -l ../Eclipse-emulator.apk | grep libgojni
+
+      - name: Keep the APKs for the next jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: |
+            Eclipse.apk
+            Eclipse-emulator.apk
+            tunnel-e2e.log
+
+  emulator:
+    # Eclipse used like a person would, on Android 8 to 16 (see
+    # scripts/smoke_test.sh). The APK is published only if all pass.
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 29, 31, 34, 36]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: apk
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android ${{ matrix.api }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/smoke_test.sh apk/Eclipse-emulator.apk out
+      - name: Results
+        if: always()
+        run: |
+          cat out/result.txt || true
+          tar czf "emulator-api${{ matrix.api }}.tgz" out || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-api${{ matrix.api }}
+          path: emulator-api${{ matrix.api }}.tgz
+
+  release:
+    needs: [apk, emulator]
+    if: always() && needs.apk.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+          merge-multiple: true
+      - name: Emulator results
+        run: |
+          ls -la art
+          for f in art/emulator-api*.tgz; do echo "== $f"; tar xzf "$f" -O out/result.txt 2>/dev/null || echo "(pas de résultat)"; done
+
       - name: Test build (private draft, never shown as the latest version)
         if: github.ref != 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete test-build -y --cleanup-tag 2>/dev/null || true
-          gh release create test-build Eclipse.apk tunnel-e2e.log --draft --prerelease \
-            --title "Build de test ($(cat VERSION), ${GITHUB_SHA::7})" --notes "Build de test, pas une version publiée."
+          gh release create test-build art/Eclipse.apk art/Eclipse-emulator.apk art/tunnel-e2e.log art/emulator-api*.tgz --draft --prerelease \
+            --title "Build de test ($(cat VERSION), ${GITHUB_SHA::7}, émulateurs : ${{ needs.emulator.result }})" --notes "Build de test, pas une version publiée."
 
-      - name: Publish the APK
+      - name: Publish the APK (only if it works on every emulator)
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "${{ needs.emulator.result }}" != "success" ]; then
+            echo "::error::Eclipse ne passe pas le test sur émulateur : rien n'est publié."
+            exit 1
+          fi
           VERSION=$(cat VERSION)
           gh release delete "v$VERSION" -y --cleanup-tag 2>/dev/null || true
-          gh release create "v$VERSION" Eclipse.apk \
+          gh release create "v$VERSION" art/Eclipse.apk \
             --title "Eclipse $VERSION" --notes-file RELEASE_NOTES.md --latest
-
-      - name: Keep the APK with this run
-        uses: actions/upload-artifact@v4
-        with:
-          name: Eclipse-apk
-          path: Eclipse.apk

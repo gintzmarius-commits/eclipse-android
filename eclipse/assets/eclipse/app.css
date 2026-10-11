@@ -202,3 +202,8 @@ input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rg
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Technical report */
+.diag { white-space: pre-wrap; word-break: break-word; font: 11.5px/1.45 ui-monospace, "Roboto Mono", monospace; color: var(--muted);
+  background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.06); border-radius: 14px; padding: 10px 12px; margin: 10px 0 14px;
+  max-height: 46vh; overflow: auto; -webkit-user-select: text; user-select: text; }

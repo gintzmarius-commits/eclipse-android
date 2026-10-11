@@ -81,6 +81,19 @@ dependencies {
     // Built-in Tailscale (tunnel/, built by scripts/build_tunnel.sh)
     implementation files('libs/eclipsenet.aar')
 }
+
+// ---- Eclipse: the built-in Tailscale ships for arm64 phones only ----
+// (its x86_64 build exists for the tests on the Android emulator:
+// gradlew -PeclipseEmulator=true)
+android {
+    packaging {
+        jniLibs {
+            if (!project.hasProperty("eclipseEmulator")) {
+                excludes += ["lib/x86_64/libgojni.so", "lib/x86/libgojni.so", "lib/armeabi-v7a/libgojni.so"]
+            }
+        }
+    }
+}
 '''
     return t
 
@@ -206,6 +219,13 @@ ECLIPSE_ACTIVITY = """<activity
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_ui" />
+        <!-- Built-in Tailscale, in its own process: if it ever fails,
+             Eclipse itself stays open -->
+        <provider
+            android:name=".EclipseTunnelProvider"
+            android:authorities="${applicationId}.tunnel"
+            android:process=":tunnel"
+            android:exported="false" />
         """
 
 def manifest(t):

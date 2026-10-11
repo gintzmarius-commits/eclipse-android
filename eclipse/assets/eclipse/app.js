@@ -117,6 +117,9 @@ const handlers = {
       setRemoteSub();
     }
   },
+  diag(text) {
+    $("#diag-text").textContent = text;
+  },
   tailscale(ev) {
     const changed = ev.installed !== ts.installed || ev.vpn !== ts.vpn;
     ts = ev;
@@ -434,7 +437,10 @@ function renderRemote() {
     $("#r-foot").textContent = st === "running" && tun.ip ? "Adresse de ce téléphone dans le réseau privé : " + tun.ip : "";
     return;
   }
-  if (!p) {
+  if (tun.failed) {
+    $("#r-text").textContent = "Le Tailscale intégré à Eclipse ne fonctionne pas sur ce téléphone. Tu peux utiliser l'appli Tailscale à la place :";
+    steps = [`Installe <b>Tailscale</b> et connecte-toi avec ${acc}.`, "Active-le, puis reviens dans Eclipse.", "Pour aider à corriger le problème : Réglages → Rapport technique."];
+  } else if (!p) {
     $("#r-text").textContent = "Avec Tailscale (gratuit), ton téléphone retrouve ton PC partout, même en 4G.";
     steps = ["Sur le PC, dans Eclipse, active <b>Jouer hors de chez toi</b>.", "Sur ce téléphone, installe <b>Tailscale</b> et connecte-toi avec le même compte.", "À la maison, scanne une fois le QR code d'Eclipse."];
   } else if (!ts.installed) {
@@ -539,6 +545,16 @@ $("#m-remove").onclick = () => {
 $("#btn-settings").onclick = () => openSheet("s-settings");
 $("#set-stream").onclick = () => { closeSheet("s-settings"); N.openSettings(); };
 $("#set-classic").onclick = () => { closeSheet("s-settings"); N.openClassic(); };
+$("#set-diag").onclick = () => {
+  closeSheet("s-settings");
+  $("#diag-text").textContent = "Préparation du rapport…";
+  openSheet("s-diag");
+  N.diagnostic();
+};
+$("#d-copy").onclick = () => {
+  N.copy($("#diag-text").textContent);
+  toast("Rapport copié : colle-le dans ton message.");
+};
 $("#ver").textContent = "Eclipse " + N.version();
 
 // ---------------------------------------------------------------------
@@ -613,7 +629,8 @@ function demoNative() {
     openTailscale: () => toast("Ouverture de Tailscale…"),
     tailscale: () => {
       later(() => window.ec.on("tailscale", { installed: location.search.includes("ts"), vpn: false }), 100);
-      later(() => window.ec.on("tunnel", { available: !location.search.includes("notun"), state: window.__tun || "needslogin" }), 150);
+      later(() => window.ec.on("tunnel", location.search.includes("tunfail") ? { available: false, failed: true }
+        : { available: !location.search.includes("notun"), state: window.__tun || "needslogin" }), 150);
     },
     tunnelLogin: () => {
       later(() => window.ec.on("tunnel", { available: true, state: "needslogin", authUrl: "https://login.tailscale.com/a/x" }), 300);
@@ -624,5 +641,7 @@ function demoNative() {
     addComputer: () => later(() => window.ec.on("added", { ok: false, error: "Aucun PC ne répond à cette adresse." }), 900),
     play: () => toast("Lancement…"), quit: () => toast("Jeu quitté"), wake: () => toast("Réveil envoyé"),
     remove: () => {}, openSettings: () => {}, openClassic: () => {}, toast: (m) => toast(m),
+    diagnostic: () => later(() => window.ec.on("diag", "Eclipse 2.2.1 (aperçu)\nAndroid 14 (API 34), Google Pixel 7, arm64-v8a\nTailscale intégré : oui\nAucun arrêt anormal récent.\n")),
+    copy: () => {},
   };
 }

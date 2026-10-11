@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Eclipse's built-in Tailscale (tunnel/) into an Android library:
+# Builds Eclipse's built-in Tailscale (tunnel/) into an Android library
+# (arm64 for phones; x86_64 only for the tests on the Android emulator):
 #   scripts/build_tunnel.sh <output folder>   ->  <output folder>/eclipsenet.aar
 set -euo pipefail
 OUT=$(realpath -m "$1")
@@ -18,6 +19,6 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)}"
 echo "NDK: $ANDROID_NDK_HOME"
 gomobile init
-gomobile bind -target=android/arm64 -androidapi 23 -trimpath -ldflags="-s -w" -o "$OUT/eclipsenet.aar" .
+gomobile bind -target=android/arm64,android/amd64 -androidapi 23 -trimpath -ldflags="-s -w" -o "$OUT/eclipsenet.aar" .
 ls -la "$OUT"
 unzip -l "$OUT/eclipsenet.aar" | grep -E "\.so|classes.jar"

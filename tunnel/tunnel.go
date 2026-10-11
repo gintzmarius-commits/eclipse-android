@@ -15,7 +15,9 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,9 +44,32 @@ func init() {
 	netmon.RegisterInterfaceGetter(androidInterfaces)
 }
 
+// SetCrashFile makes the Go runtime write the report of a fatal error to
+// this file (shown by Eclipse after a crash of the network engine).
+func SetCrashFile(path string) (err error) {
+	defer catch(&err)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	return debug.SetCrashOutput(f, debug.CrashOptions{})
+}
+
+// catch turns a panic in a function called by the app into an error.
+func catch(err *error) {
+	if r := recover(); r != nil {
+		*err = fmt.Errorf("erreur interne : %v", r)
+		log.Printf("eclipsenet: panic: %v\n%s", r, debug.Stack())
+	}
+}
+
 // Start joins the private network (state kept in dir). Calling it again
 // does nothing. Signing in is needed the first time (see Status).
-func Start(dir, hostname string) error {
+func Start(dir, hostname string) (err error) {
+	defer catch(&err)
 	mu.Lock()
 	defer mu.Unlock()
 	if srv != nil {
@@ -54,6 +79,12 @@ func Start(dir, hostname string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+	control := controlURL
+	// Tests on an emulator point the app to a local test network (this
+	// file can only be written by the app itself or by root).
+	if b, err := os.ReadFile(filepath.Join(dir, "test-control-url")); err == nil {
+		control = strings.TrimSpace(string(b))
+	}
 	logf := func(format string, args ...any) {
 		s := fmt.Sprintf(format, args...)
 		mu2.Lock()
@@ -61,10 +92,18 @@ func Start(dir, hostname string) error {
 		mu2.Unlock()
 		log.Print("eclipsenet: " + s)
 	}
+	// Tests on an emulator check that Eclipse survives a failure of the
+	// network engine (same protection: only the app or root can write it).
+	if _, err := os.Stat(filepath.Join(dir, "test-crash")); err == nil {
+		go func() {
+			time.Sleep(3 * time.Second)
+			panic("eclipse: test crash of the network engine")
+		}()
+	}
 	srv = &tsnet.Server{
 		Dir:        filepath.Clean(dir),
 		Hostname:   hostname,
-		ControlURL: controlURL,
+		ControlURL: control,
 		Logf:       logf,
 		UserLogf:   logf,
 	}
@@ -83,7 +122,13 @@ type status struct {
 }
 
 // Status returns the state as JSON.
-func Status() string {
+func Status() (out string) {
+	defer func() {
+		if r := recover(); r != nil {
+			b, _ := json.Marshal(status{State: "error", Error: fmt.Sprintf("erreur interne : %v", r)})
+			out = string(b)
+		}
+	}()
 	b, _ := json.Marshal(getStatus())
 	return string(b)
 }
@@ -136,7 +181,8 @@ func getStatus() status {
 }
 
 // Login asks for a sign-in page (Status then gives its address).
-func Login() error {
+func Login() (err error) {
+	defer catch(&err)
 	lc, err := client()
 	if err != nil {
 		return err
@@ -147,7 +193,8 @@ func Login() error {
 }
 
 // Logout disconnects this phone from the account.
-func Logout() error {
+func Logout() (err error) {
+	defer catch(&err)
 	lc, err := client()
 	if err != nil {
 		return err
@@ -173,7 +220,8 @@ func client() (interface {
 // Forward relays 127.0.0.1 ports to the PC's Tailscale address. Ports
 // are comma-separated lists. Calling it again with other values replaces
 // the previous relay; with the same values it does nothing.
-func Forward(target, tcpPorts, udpPorts string) error {
+func Forward(target, tcpPorts, udpPorts string) (err error) {
+	defer catch(&err)
 	if _, err := netip.ParseAddr(target); err != nil {
 		return fmt.Errorf("adresse invalide : %q", target)
 	}
@@ -209,7 +257,12 @@ func Forward(target, tcpPorts, udpPorts string) error {
 
 // Probe tries a TCP connection to target:port over the private network
 // and returns "" when it works, or the error.
-func Probe(target string, port int, timeoutMs int) string {
+func Probe(target string, port int, timeoutMs int) (out string) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = fmt.Sprint("erreur interne : ", r)
+		}
+	}()
 	mu.Lock()
 	s := srv
 	mu.Unlock()

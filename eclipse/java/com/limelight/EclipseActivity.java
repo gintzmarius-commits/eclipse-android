@@ -23,6 +23,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -135,6 +136,7 @@ public class EclipseActivity extends Activity {
         super.onCreate(savedInstanceState);
         inForeground = true;
         EclipsePairing.init(this);
+        EclipseTunnel.init(this);
         if (savedInstanceState == null) {
             takeQrLink(getIntent());
         }
@@ -187,6 +189,7 @@ public class EclipseActivity extends Activity {
         s.setAllowContentAccess(false);
         s.setMediaPlaybackRequiresUserGesture(true);
         web.addJavascriptInterface(new Bridge(), "EclipseNative");
+        web.setWebChromeClient(new WebChromeClient()); // confirm() dialogs
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -446,6 +449,7 @@ public class EclipseActivity extends Activity {
     /** Starts the built-in Tailscale (background thread). */
     private void tunnelStart() {
         if (!EclipseTunnel.available()) return;
+        tunnelWanted = true;
         synchronized (tunnelLock) {
             try {
                 EclipseTunnel.start(this);
@@ -492,34 +496,53 @@ public class EclipseActivity extends Activity {
         }
     }
 
-    /** Keeps the page informed while Eclipse is on screen. */
+    /** The engine was started during this session: keep it running. */
+    private volatile boolean tunnelWanted;
+
+    /**
+     * Keeps the page informed while Eclipse is on screen, and starts the
+     * engine (again, if its process was restarted) when it is needed.
+     */
     private void tunnelWatch() {
         if (!EclipseTunnel.available() || tunnelWatching) return;
         tunnelWatching = true;
-        new Thread() {
+        new Thread("eclipse-tunnel-watch") {
             @Override
             public void run() {
-                boolean started = false;
-                while (inForeground && !isFinishing()) {
-                    if (!started && (hasRemote() || !"stopped".equals(EclipseTunnel.state()))) {
-                        tunnelStart();
-                        started = true;
-                    } else if (started) {
-                        tunnelSync();
-                    }
-                    try {
+                try {
+                    while (inForeground && !isFinishing() && EclipseTunnel.available()) {
+                        if ((tunnelWanted || hasRemote()) && "stopped".equals(EclipseTunnel.state())) {
+                            tunnelStart();
+                        } else {
+                            tunnelSync();
+                        }
                         Thread.sleep(2000);
-                    } catch (InterruptedException e) {
-                        break;
                     }
+                } catch (Throwable e) {
+                    LimeLog.warning("Eclipse: tunnel watch: " + e);
+                } finally {
+                    tunnelWatching = false;
                 }
-                tunnelWatching = false;
+                if (!EclipseTunnel.available()) emitTunnelOff();
             }
         }.start();
     }
 
+    /** Built-in Tailscale missing, or switched off because it kept failing here. */
+    private void emitTunnelOff() {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("available", false);
+            o.put("failed", EclipseTunnel.failedHere());
+            tunnelLast = "";
+            emit("tunnel", o.toString());
+        } catch (JSONException ignored) {
+        }
+    }
+
     /** Sign-in with the Tailscale account (once): opens the page in the browser. */
     private void tunnelLogin() {
+        tunnelWanted = true;
         new Thread() {
             @Override
             public void run() {
@@ -552,6 +575,7 @@ public class EclipseActivity extends Activity {
                         return;
                     }
                     final String u = url;
+                    android.util.Log.i("Eclipse", "Tailscale sign-in page ready: " + Uri.parse(u).getHost());
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
@@ -1435,8 +1459,41 @@ public class EclipseActivity extends Activity {
                     }
                 }.start();
             } else {
-                emit("tunnel", "{\"available\":false}");
+                emitTunnelOff();
             }
+        }
+
+        /** Technical report (settings): sent to the page as a "diag" event. */
+        @JavascriptInterface
+        public void diagnostic() {
+            new Thread() {
+                @Override
+                public void run() {
+                    String r;
+                    try {
+                        r = EclipseDiag.report(EclipseActivity.this);
+                    } catch (Throwable t) {
+                        r = "Rapport impossible : " + t;
+                    }
+                    emit("diag", JSONObject.quote(r));
+                }
+            }.start();
+        }
+
+        @JavascriptInterface
+        public void copy(String text) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Eclipse", text));
+                        if (Build.VERSION.SDK_INT < 33) toast("Copié");
+                    } catch (Exception e) {
+                        toast("Copie impossible");
+                    }
+                }
+            });
         }
 
         /** Built-in Tailscale: sign in (opens the browser). */
