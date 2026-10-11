@@ -67,6 +67,16 @@ jobs:
       - name: Built-in Tailscale (Go library for Android)
         run: scripts/ci_run.sh "Tailscale intégré" scripts/build_tunnel.sh moonlight/app/libs
 
+      - name: Logs of the built-in Tailscale tests (when they fail)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete build-failure -y --cleanup-tag 2>/dev/null || true
+          ls tunnel-test.log tunnel-e2e.log 2>/dev/null
+          gh release create build-failure $(ls tunnel-test.log tunnel-e2e.log 2>/dev/null) --draft --prerelease \
+            --title "Échec de build (${GITHUB_SHA::7})" --notes "Journaux des tests du Tailscale intégré." || true
+
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
