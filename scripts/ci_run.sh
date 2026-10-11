@@ -6,7 +6,8 @@ log=$(mktemp)
 "$@" 2>&1 | tee "$log"
 code=${PIPESTATUS[0]}
 if [ "$code" -ne 0 ]; then
-  msg=$(tr '\r' '\n' < "$log" | grep -v '^\s*$' | tail -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+  # compiler errors first (file:line), then the end of the output
+  msg=$( (tr '\r' '\n' < "$log" | grep -E '\.(java|kt|go):[0-9]+(:[0-9]+)?: (error|warning: \[)|error:' | head -25; echo "…"; tr '\r' '\n' < "$log" | grep -v '^\s*$' | tail -15) | cut -c1-400 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
   echo "::error title=${title} (code ${code})::${msg}"
 fi
 exit "$code"

@@ -635,7 +635,12 @@ public class EclipseActivity extends Activity {
             LimeLog.info("Eclipse: PC found on Tailscale: " + o.optString("name") + " (" + local + ")");
             ComputerDetails d = new ComputerDetails();
             d.manualAddress = new ComputerDetails.AddressTuple(local, port);
-            mb.addComputerBlocking(d);
+            try {
+                mb.addComputerBlocking(d);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 
@@ -1231,7 +1236,8 @@ public class EclipseActivity extends Activity {
     }
 
     /** The PC at this address (added to Moonlight's list), or null. */
-    private static ComputerDetails probePc(ComputerManagerService.ComputerManagerBinder mb, String addr, int port) {
+    private static ComputerDetails probePc(ComputerManagerService.ComputerManagerBinder mb, String addr, int port)
+            throws InterruptedException {
         ComputerDetails d = new ComputerDetails();
         d.manualAddress = new ComputerDetails.AddressTuple(addr, port);
         if (!mb.addComputerBlocking(d) || d.uuid == null || d.activeAddress == null) {
