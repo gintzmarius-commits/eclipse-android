@@ -359,6 +359,8 @@ function qrEvent(ev) {
     case "error":
       stopQrHint();
       $("#q-err").textContent = ev.error || "La connexion a échoué.";
+      $("#q-fix").hidden = ev.fix !== "tailscale";
+      $("#q-fix").lastChild.textContent = ev.installed === false ? "Installer Tailscale" : "Ouvrir Tailscale";
       qrStep("q-fail");
       openSheet("s-qr");
       return;
@@ -402,6 +404,7 @@ function renderRemote() {
 
 $("#r-go").onclick = () => N.openTailscale();
 $("#q-ts").onclick = () => N.openTailscale();
+$("#q-fix").onclick = () => N.openTailscale();
 $("#set-remote").onclick = () => {
   closeSheet("s-settings");
   openRemote(null);

@@ -779,9 +779,7 @@ public class EclipseActivity extends Activity {
             }
             if (superseded(job)) return;
             if (target == null) {
-                emitQr("error", name, null, otherPc
-                        ? "Un autre PC répond à l'adresse de ce QR code. Rescanne le code affiché sur " + name + "."
-                        : "Le téléphone ne trouve pas " + name + ". Vérifie qu'il est sur le même Wi-Fi que le PC, et que Sunshine est démarré dans Eclipse sur le PC.");
+                notFound(q, name, otherPc);
                 return;
             }
             if (target.name != null && !target.name.isEmpty()) name = target.name;
@@ -910,6 +908,55 @@ public class EclipseActivity extends Activity {
             emit("paired", ev.toString());
             pushComputers();
         }
+    }
+
+    /** Explains why the PC of a QR code was not found, and what to do. */
+    private void notFound(EclipseQr q, String name, boolean otherPc) {
+        String msg;
+        String fix = null;
+        boolean vpn = vpnActive();
+        if (otherPc) {
+            msg = "Un autre PC répond à l'adresse de ce QR code. Rescanne le code affiché sur " + name + ".";
+        } else if (!q.remote.isEmpty() && !vpn) {
+            msg = "Ton téléphone n'est pas sur le Wi-Fi de " + name + ". Pour le joindre de loin, active Tailscale sur ce téléphone"
+                    + (q.remoteAccount.isEmpty() ? "" : " (compte " + q.remoteAccount + ")") + ", puis rescanne le QR code.";
+            fix = "tailscale";
+        } else if (!q.remote.isEmpty()) {
+            msg = "Tailscale est actif, mais " + name + " ne répond pas. Vérifie que le PC est allumé, que « Jouer hors de chez toi » "
+                    + "est activé dans Eclipse sur le PC, et que les deux utilisent le même compte Tailscale"
+                    + (q.remoteAccount.isEmpty() ? "" : " (" + q.remoteAccount + ")") + ".";
+            fix = "tailscale";
+        } else if (!onWifi()) {
+            msg = "Ton téléphone n'est pas sur le Wi-Fi de " + name + ", et le jeu à distance n'est pas activé sur le PC. "
+                    + "Connecte le téléphone au Wi-Fi de la maison, ou, sur le PC, active « Jouer hors de chez toi » puis rescanne le nouveau QR code.";
+        } else {
+            msg = "Le téléphone ne trouve pas " + name + ". Vérifie qu'il est sur le même Wi-Fi que le PC, et que Sunshine est démarré dans Eclipse sur le PC.";
+        }
+        try {
+            JSONObject ev = new JSONObject();
+            ev.put("stage", "error");
+            ev.put("name", name);
+            ev.put("error", msg);
+            if (fix != null) {
+                ev.put("fix", fix);
+                ev.put("installed", tailscaleInstalled());
+            }
+            emit("qr", ev.toString());
+        } catch (JSONException ignored) {
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean onWifi() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            for (Network n : cm.getAllNetworks()) {
+                NetworkCapabilities c = cm.getNetworkCapabilities(n);
+                if (c != null && (c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     private void qrPaired(ComputerDetails target, String name, int job, EclipseQr q) {
