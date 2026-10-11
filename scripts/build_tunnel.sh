@@ -11,8 +11,8 @@ go mod tidy
 go vet ./...
 go test -count=1 ./...
 ECLIPSE_E2E=1 go test -count=1 -v -run TestTailnetRelay . > /tmp/e2e.log 2>&1 || { tail -40 /tmp/e2e.log; exit 1; }
-SUMMARY=$(grep -E "^(--- |ok|PASS|FAIL)|tcp:|udp burst|phone status" /tmp/e2e.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
-echo "::notice title=Test Tailscale de bout en bout::${SUMMARY}"
+grep -E "^(--- |ok|PASS|FAIL)|tcp:|udp burst|phone status" /tmp/e2e.log > "$OUT/../../../e2e-summary.txt" || true
+cat "$OUT/../../../e2e-summary.txt"
 go install golang.org/x/mobile/cmd/gomobile@latest golang.org/x/mobile/cmd/gobind@latest
 export PATH="$PATH:$(go env GOPATH)/bin"
 export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)}"
