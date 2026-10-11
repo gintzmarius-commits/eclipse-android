@@ -1309,6 +1309,7 @@ public class EclipseActivity extends Activity {
                         if (live != null) live.serverCert = pm.getPairedCert();
                         c.serverCert = pm.getPairedCert();
                         c.pairState = PairState.PAIRED;
+                        prefs().edit().remove("hidden:" + c.uuid).apply();
                         managerBinder.invalidateStateForComputer(c.uuid);
                         ev.put("ok", true);
                     } else {
@@ -1674,7 +1675,18 @@ public class EclipseActivity extends Activity {
 
         @JavascriptInterface
         public void remove(final String uuid) {
-            prefs().edit().remove("remote:" + uuid).remove("account:" + uuid).apply();
+            final String loop = prefs().getString("loop:" + uuid, null);
+            // hidden: not added back by the search on Tailscale (a new QR code does)
+            prefs().edit().remove("remote:" + uuid).remove("account:" + uuid).remove("loop:" + uuid)
+                    .putBoolean("hidden:" + uuid, true).apply();
+            if (loop != null && EclipseTunnel.available()) {
+                new Thread() {
+                    @Override
+                    public void run() {
+                        EclipseTunnel.stopForward(loop);
+                    }
+                }.start();
+            }
             ComputerDetails c = computers.remove(uuid);
             if (c != null && managerBinder != null) {
                 managerBinder.removeComputer(c);

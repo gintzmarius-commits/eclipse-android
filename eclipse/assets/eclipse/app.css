@@ -207,3 +207,8 @@ input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rg
 .diag { white-space: pre-wrap; word-break: break-word; font: 11.5px/1.45 ui-monospace, "Roboto Mono", monospace; color: var(--muted);
   background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.06); border-radius: 14px; padding: 10px 12px; margin: 10px 0 14px;
   max-height: 46vh; overflow: auto; -webkit-user-select: text; user-select: text; }
+
+/* Connected: playable everywhere */
+.everywhere { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--ok, #1e9e5a); font-weight: 600; margin-top: 8px; }
+.everywhere svg { width: 16px; height: 16px; }
+#q-remote-wait .spin { margin-right: 6px; vertical-align: -3px; }

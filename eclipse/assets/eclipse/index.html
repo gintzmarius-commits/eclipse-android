@@ -132,10 +132,13 @@
       <div class="ok"><svg><use href="#i-check"/></svg></div>
       <h2>C'est connecté !</h2>
       <p class="muted">Tu peux jouer aux jeux de <b id="q-name"></b>.</p>
+      <p class="small everywhere" id="q-everywhere" hidden><svg><use href="#i-globe"/></svg>Joignable partout, même en 4G</p>
       <div class="remote-hint" id="q-remote" hidden>
-        <div class="row"><svg><use href="#i-globe"/></svg><strong>Pour jouer hors de chez toi</strong></div>
-        <p>Installe <b>Tailscale</b> (gratuit) et connecte-toi avec <b class="q-account">le même compte que sur le PC</b>.</p>
+        <div class="row"><svg><use href="#i-globe"/></svg><strong id="q-remote-title">Pour jouer partout, même en 4G</strong></div>
+        <p id="q-remote-text">Installe <b>Tailscale</b> (gratuit) et connecte-toi avec <b class="q-account">le même compte que sur le PC</b>.</p>
+        <p class="small muted" id="q-remote-wait" hidden><span class="spin"></span>En attente de la connexion…</p>
         <button class="btn primary wide" id="q-ts">Installer Tailscale</button>
+        <button class="link" id="q-phone" hidden>Me connecter depuis ce téléphone</button>
         <button class="btn wide" id="q-later">Plus tard</button>
       </div>
     </div>
@@ -154,7 +157,7 @@
     <div class="grab"></div>
     <div class="pstep">
       <div class="qr-badge big"><svg><use href="#i-globe"/></svg></div>
-      <h2>Jouer hors de chez toi</h2>
+      <h2>Jouer partout</h2>
       <p class="muted" id="r-text"></p>
       <ol class="r-steps" id="r-steps"></ol>
       <button class="btn primary wide" id="r-go">Ouvrir Tailscale</button>
@@ -208,7 +211,7 @@
     <h2>Réglages</h2>
     <div class="menu">
       <button class="menu-row" id="set-stream"><svg><use href="#i-sliders"/></svg><span>Qualité et réglages du streaming<small>Résolution, images par seconde, manettes…</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
-      <button class="menu-row" id="set-remote"><svg><use href="#i-globe"/></svg><span>Jouer hors de chez toi<small id="set-remote-sub">Avec Tailscale, même en 4G</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
+      <button class="menu-row" id="set-remote"><svg><use href="#i-globe"/></svg><span>Jouer partout<small id="set-remote-sub">Avec Tailscale, même en 4G</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
       <button class="menu-row" id="set-classic"><svg><use href="#i-moon"/></svg><span>Interface Moonlight classique<small>Toutes les options avancées</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
       <button class="menu-row" id="set-diag"><svg><use href="#i-doc"/></svg><span>Rapport technique<small>À envoyer si quelque chose ne marche pas</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
     </div>

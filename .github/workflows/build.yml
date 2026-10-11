@@ -107,6 +107,7 @@ jobs:
             Eclipse.apk
             Eclipse-emulator.apk
             tunnel-e2e.log
+            fakepc.test
 
   emulator:
     # Eclipse used like a person would, on Android 8 to 16 (see
@@ -129,6 +130,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Test PC on a private Tailscale network
+        run: |
+          # The emulator reaches this machine at 10.0.2.2: give it that address too.
+          sudo ip addr add 10.0.2.2/32 dev lo
+          chmod +x apk/fakepc.test
+          ECLIPSE_FAKE_PC=/tmp/fakepc nohup apk/fakepc.test -test.run TestEmulatorPC -test.v -test.timeout 60m > /tmp/fakepc.log 2>&1 &
+          for i in $(seq 1 90); do [ -s /tmp/fakepc ] && break; sleep 1; done
+          cat /tmp/fakepc || { tail -30 /tmp/fakepc.log; echo "::warning::PC de test indisponible"; }
       - name: Android ${{ matrix.api }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -138,7 +147,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash scripts/smoke_test.sh apk/Eclipse-emulator.apk out
+          script: FAKE_PC=/tmp/fakepc FAKE_PC_LOG=/tmp/fakepc.log bash scripts/smoke_test.sh apk/Eclipse-emulator.apk out
       - name: Results
         if: always()
         run: |
@@ -147,6 +156,8 @@ jobs:
             sum=$(grep -E "^(FAIL|SMOKE)" out/result.txt | tr '\n' ' ' | cut -c1-900)
             echo "::notice title=Android API ${{ matrix.api }}::${sum:-pas de résultat}"
           fi
+          touch /tmp/fakepc.stop
+          cp /tmp/fakepc.log out/ 2>/dev/null || true
           tar czf "emulator-api${{ matrix.api }}.tgz" out || true
       - uses: actions/upload-artifact@v4
         if: always()

@@ -70,19 +70,27 @@ wait_alive() { # seconds, label
   done
   note "OK toujours ouverte après $1 s ($2)"
 }
-launch() { adb shell am start -W -n "$ACT" > /dev/null 2>&1; }
-# back to Eclipse's home screen (closes sheets; reopens Eclipse if needed)
-home_screen() {
-  local i
-  for i in 1 2 3; do
-    dump home
-    screen_has home "Réglages" && ! screen_has home "Fermer" && ! screen_has home "Rescanner" && return 0
-    [ -z "$(alive)" ] && { launch; sleep 3; continue; }
-    adb shell input keyevent KEYCODE_BACK
-    sleep 1
+# launch: opens Eclipse like the icon does (tries again if Android
+# does not start it: seen on Android 8 emulators right after a force-stop)
+launch() {
+  local try i
+  for try in 1 2 3; do
+    adb shell am start -W -n "$ACT" > /dev/null 2>&1
+    for i in $(seq 1 8); do
+      [ -n "$(pid_of $PKG)" ] && return 0
+      sleep 1
+    done
+    adb shell input keyevent KEYCODE_HOME
+    sleep 2
   done
-  [ -z "$(alive)" ] && launch
-  sleep 2
+  return 1
+}
+# back to Eclipse's home screen, nothing open over it
+home_screen() {
+  adb shell am force-stop "$PKG"
+  sleep 1
+  launch
+  sleep 3
 }
 # crashes of Eclipse's own processes in a log file
 eclipse_crashes() {
@@ -130,33 +138,33 @@ LOGCAT=$!
 note "== 1. Utilisation normale"
 launch
 wait_alive 20 "premier lancement" && shot 1-launch
-if [ $TUNNEL = 1 ]; then
-  if [ -n "$(pid_of $PKG:tunnel)" ]; then note "OK le moteur Tailscale tourne dans son propre processus"
-  else fail "le processus du moteur Tailscale n'a pas démarré"; fi
+if [ $TUNNEL = 1 ] && [ -n "$(pid_of $PKG:tunnel)" ]; then
+  note "  (moteur Tailscale démarré alors que rien ne le demande)"
 fi
 
 open_qr
 if [ $TUNNEL = 1 ]; then
-  if wait_text "Connexion Tailscale" 45; then note "OK QR code : propose la connexion Tailscale"
-  else fail "QR code : pas de bouton « Connexion Tailscale »"; fi
-else
-  wait_text "Rescanner" 45
-fi
-wait_alive 3 "code QR avec Tailscale" && shot 2-qr
-
-if [ $TUNNEL = 1 ] && tap "Connexion Tailscale"; then
-  # The sign-in page comes from Tailscale's servers: the engine works.
+  # The PC is not on this Wi-Fi and the phone is not signed in to Tailscale:
+  # the sign-in page opens by itself (it comes from Tailscale's servers: the
+  # engine works), and Eclipse waits to try again through Tailscale.
   ok=0
-  for i in $(seq 1 40); do
+  for i in $(seq 1 60); do
     sleep 1
-    if grep -q "login.tailscale.com" "$OUT/logcat.txt" 2>/dev/null; then ok=1; break; fi
+    if grep -q "sign-in page ready: login.tailscale.com" "$OUT/logcat.txt" 2>/dev/null; then ok=1; break; fi
   done
-  if [ $ok = 1 ]; then note "OK page de connexion Tailscale ouverte (après $i s)"
+  if [ $ok = 1 ]; then note "OK page de connexion Tailscale ouverte toute seule (après $i s)"
   else fail "la page de connexion Tailscale ne s'est pas ouverte"; fi
   sleep 3
   shot 3-signin
+  if [ -n "$(pid_of $PKG:tunnel)" ]; then note "OK le moteur Tailscale tourne dans son propre processus"
+  else fail "le processus du moteur Tailscale n'a pas démarré"; fi
   launch   # back from the browser
-  wait_alive 8 "retour dans Eclipse" && shot 4-back
+  wait_alive 5 "retour dans Eclipse" && shot 4-back
+  if screen_has 4-back "Une seule fois"; then note "OK Eclipse attend la connexion à Tailscale"
+  else note "  (écran d'attente de connexion non vu)"; fi
+else
+  wait_text "Rescanner" 45
+  wait_alive 3 "code QR" && shot 2-qr
 fi
 
 adb shell am force-stop "$PKG"
@@ -200,8 +208,7 @@ if [ $TUNNEL = 1 ]; then
   launch
   wait_alive 3 "lancement"
   open_qr
-  wait_text "Connexion Tailscale" 45 && tap "Connexion Tailscale"
-  wait_alive 45 "pannes du moteur"
+  wait_alive 50 "pannes du moteur"
   DEATHS=$(grep -c "Process $PKG:tunnel (pid [0-9]*) has died\|$PKG:tunnel.*exited\|Process $PKG:tunnel .*died" "$OUT/logcat.txt")
   note "le moteur s'est arrêté $DEATHS fois"
   [ "$DEATHS" -ge 1 ] || fail "la panne volontaire n'a pas eu lieu"
@@ -213,13 +220,54 @@ if [ $TUNNEL = 1 ]; then
     shot 8-report
   fi
   home_screen
-  if tap "Réglages" && wait_text "Jouer hors de chez toi" 10 && tap "Jouer hors de chez toi"; then
+  if tap "Réglages" && wait_text "Jouer partout" 10 && tap "Jouer partout"; then
     if wait_text "ne fonctionne pas sur ce téléphone" 10; then note "OK Eclipse explique que le Tailscale intégré est arrêté"
     else fail "pas d'explication après les pannes"; fi
     shot 9-remote
   fi
   wait_alive 3 "fin"
   adb shell "rm -f $D/test-crash" > /dev/null 2>&1
+fi
+
+# ---------------------------------------------------------------- part 3
+# A PC reachable only through Tailscale (a private test network run on the
+# machine hosting the emulator, see tunnel/emulator_pc_test.go): the app
+# joins it, finds the PC and talks to it through its relay.
+if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
+  note "== 3. Un PC joignable seulement par Tailscale (réseau de test)"
+  P3_FROM=$(wc -l < "$OUT/logcat.txt")
+  read -r CTRL PCIP < "$FAKE_PC"
+  adb shell pm clear $PKG > /dev/null 2>&1
+  CTX=$(adb shell stat -c %C /data/data/$PKG | tr -d '\r')
+  OWN=$(adb shell stat -c %u:%g /data/data/$PKG | tr -d '\r')
+  D=/data/data/$PKG/files/tailscale
+  adb shell "mkdir -p $D && echo '$CTRL' > $D/test-control-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files"
+  launch
+  wait_alive 4 "lancement"
+  QR3="eclipse://pair?a=192.168.77.77&id=DE7509DC-6D80-5E2F-7700-BF75D0205FCB&n=Lenovo+500w+Gen+5&p=1234&port=47989&t=abcdefgh&tl=1&ts=$PCIP&tu=test%40example.com&v=1"
+  adb shell "am start -W -a android.intent.action.VIEW -d '$QR3' $PKG" > /dev/null 2>&1
+  ok=0
+  for i in $(seq 1 90); do
+    sleep 1
+    if grep -q "PC: GET /pair" "${FAKE_PC_LOG:-/dev/null}" 2>/dev/null; then ok=1; break; fi
+  done
+  if [ $ok = 1 ]; then note "OK le téléphone a joint le PC par Tailscale et lui a demandé la connexion (après $i s)"
+  else fail "le téléphone n'a pas joint le PC par Tailscale"; fi
+  wait_alive 5 "connexion par Tailscale"
+  shot 10-tailnet-qr
+  # The relay of this PC listens on 127.0.0.2:47989 (0200007F:BB55 in /proc).
+  if adb shell cat /proc/net/tcp | grep -qi "0200007F:BB55 00000000:0000 0A"; then note "OK relais du PC sur 127.0.0.2"
+  else fail "pas de relais sur 127.0.0.2"; fi
+  home_screen
+  if wait_text "Lenovo 500w Gen 5" 30; then note "OK le PC trouvé par Tailscale est dans la liste"
+  else fail "le PC trouvé par Tailscale n'est pas dans la liste"; fi
+  shot 11-tailnet-list
+  tail -n +"$((P3_FROM + 1))" "$OUT/logcat.txt" > "$OUT/logcat-part3.txt"
+  if eclipse_crashes "$OUT/logcat-part3.txt" > "$OUT/part3-crashes.txt"; then
+    fail "plantage avec Tailscale : $(head -1 "$OUT/part3-crashes.txt")"
+  else
+    note "OK aucun plantage avec Tailscale"
+  fi
 fi
 
 sleep 2
