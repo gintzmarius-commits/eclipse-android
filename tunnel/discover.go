@@ -67,8 +67,12 @@ func Discover(ports string, timeoutMs int) (out string, err error) {
 	}
 	var targets []target
 	for _, p := range st.Peer {
-		if p == nil || !p.Online {
+		// Online, or seen lately (some coordination servers do not say).
+		if p == nil || !(p.Online || p.LastSeen.IsZero() || time.Since(p.LastSeen) < 10*time.Minute) {
 			continue
+		}
+		if len(targets) >= 32 {
+			break
 		}
 		switch strings.ToLower(p.OS) {
 		case "android", "ios", "tvos":

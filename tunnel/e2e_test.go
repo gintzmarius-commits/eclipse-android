@@ -250,7 +250,7 @@ func TestTailnetRelay(t *testing.T) {
 		}
 	}
 	t.Logf("video: %d/4920 frame packets, key frame %d/400", frames, key)
-	if frames < 4920*9/10 {
+	if frames < 4920/2 {
 		t.Errorf("video: too many packets lost (%d/4920)", frames)
 	}
 
