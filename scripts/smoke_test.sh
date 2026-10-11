@@ -80,6 +80,8 @@ launch() {
       [ -n "$(pid_of $PKG)" ] && return 0
       sleep 1
     done
+    # Android 8: a browser left in front can keep Eclipse from starting
+    adb shell am force-stop com.android.chrome > /dev/null 2>&1
     adb shell input keyevent KEYCODE_HOME
     sleep 2
   done
@@ -158,7 +160,8 @@ if [ $TUNNEL = 1 ]; then
   shot 3-signin
   if [ -n "$(pid_of $PKG:tunnel)" ]; then note "OK le moteur Tailscale tourne dans son propre processus"
   else fail "le processus du moteur Tailscale n'a pas démarré"; fi
-  launch   # back from the browser
+  adb shell am force-stop com.android.chrome > /dev/null 2>&1   # the person leaves the browser
+  launch   # back in Eclipse
   wait_alive 5 "retour dans Eclipse" && shot 4-back
   if screen_has 4-back "Une seule fois"; then note "OK Eclipse attend la connexion à Tailscale"
   else note "  (écran d'attente de connexion non vu)"; fi
