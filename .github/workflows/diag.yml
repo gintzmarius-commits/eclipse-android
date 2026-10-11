@@ -1,0 +1,52 @@
+name: Emulator check of a published APK
+
+on:
+  push:
+    branches: ["dev/diag"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { api: 34, abi: "", tag: "v2.2.0", name: "220-api34" }
+          - { api: 34, abi: "arm64-v8a", tag: "v2.2.0", name: "220-api34-arm" }
+          - { api: 31, abi: "arm64-v8a", tag: "v2.2.0", name: "220-api31-arm" }
+          - { api: 34, abi: "arm64-v8a", tag: "v2.1.0", name: "210-api34-arm" }
+    steps:
+      - uses: actions/checkout@v5
+      - name: APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ matrix.tag }}" -p Eclipse.apk -D apk
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/smoke_test.sh apk/Eclipse.apk out "${{ matrix.abi }}" || true
+      - name: Results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat out/result.txt || true
+          tar czf "diag-${{ matrix.name }}.tgz" out
+          R="diag-${{ matrix.name }}"
+          gh release delete "$R" -y 2>/dev/null || true
+          gh release create "$R" "diag-${{ matrix.name }}.tgz" out/result.txt --draft --prerelease --title "$R" --notes "diagnostic"
