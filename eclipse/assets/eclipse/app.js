@@ -640,11 +640,117 @@ function closeSheet(id, quiet) {
 for (const b of $$("[data-close]")) b.onclick = () => closeSheet(b.dataset.close);
 for (const s of $$(".sheet")) s.addEventListener("click", (e) => { if (e.target === s) closeSheet(s.id); });
 
+
+// ---------------------------------------------------------------------
+// Tabs: Jouer / Fichiers (Eclipse 2.4)
+// ---------------------------------------------------------------------
+let tab = "play";
+let fx = null; // the file browser
+let fxReq = 0;
+const fxWaiting = {};
+
+function setTab(t) {
+  tab = t;
+  for (const b of $$(".btab")) b.classList.toggle("active", b.dataset.tab === t);
+  const files = t === "files";
+  $("#v-files").hidden = !files;
+  $("#v-pcs").hidden = files || !!current;
+  $("#v-games").hidden = files || !current;
+  $("#back").hidden = files || !current;
+  $("#brand").hidden = !files && !!current;
+  $("#title-sm").hidden = files || !current;
+  if (files) openFiles();
+  $(".content").scrollTop = 0;
+}
+for (const b of $$(".btab")) b.onclick = () => setTab(b.dataset.tab);
+
+function fxCall(op, dev, path) {
+  return new Promise((resolve, reject) => {
+    const req = "r" + ++fxReq;
+    fxWaiting[req] = { resolve, reject };
+    N.filesCall(req, dev.id, op, path || "");
+  });
+}
+
+const phoneAdapter = {
+  empty: "Aucun PC connecté. Connecte un PC dans l'onglet Jouer (QR code), avec Eclipse 2.4 ou plus récent dessus.",
+  devices: () => Promise.resolve(JSON.parse(N.filesDevices() || "[]")),
+  roots: (dev) => fxCall("roots", dev),
+  list: (dev, path) => fxCall("list", dev, path),
+  sep: (dev, path) => (/^[A-Za-z]:\\/.test(path || "") || (fx && fx.roots && fx.roots[0] && /^[A-Za-z]:\\/.test(fx.roots[0].path)) ? "\\" : "/"),
+  download(dev, path, entry) {
+    N.filesDownload("dl" + Date.now(), dev.id, path, entry.name, false);
+  },
+  open(dev, path, entry) {
+    N.filesDownload("op" + Date.now(), dev.id, path, entry.name, true);
+  },
+  pick(dev, dir) {
+    N.filesPick(dev.id, dir);
+  },
+};
+
+function openFiles() {
+  if (!fx) fx = new EclipseFiles.Browser($("#fx-phone"), phoneAdapter, { toast, alwaysDevices: false });
+  fx.start();
+  N.shareState();
+}
+
+handlers.files = (ev) => {
+  const w = fxWaiting[ev.req];
+  if (!w) return;
+  delete fxWaiting[ev.req];
+  if (ev.ok) w.resolve(ev.data);
+  else w.reject(new Error(ev.error || "Erreur"));
+};
+handlers.transfer = (t) => {
+  if (!fx) return;
+  if (t.state === "done" && t.dir === "down" && t.uri) {
+    t.doneText = "Enregistré dans Téléchargements › Eclipse";
+    t.action = { label: "Ouvrir", run: () => N.filesView(t.uri, t.name) };
+  }
+  if (t.state === "done" && t.dir === "up") t.doneText = "Envoyé sur le PC";
+  fx.transfer(t);
+};
+handlers.filesSent = (ev) => {
+  if (fx) fx.ui().refresh({ id: ev.dev }, ev.dir);
+};
+handlers.openTab = (ev) => setTab(ev.tab);
+handlers.share = (st) => {
+  const on = $("#share-on");
+  on.checked = !!st.enabled && !!st.access;
+  const note = $("#share-note");
+  note.hidden = false;
+  if (st.enabled && st.access) {
+    $("#share-sub").textContent = "Activé : tes PC voient les fichiers de ce téléphone.";
+    note.textContent = "Sur le PC : Eclipse, onglet Fichiers. Une notification reste affichée tant que c'est activé.";
+  } else if (st.waiting) {
+    $("#share-sub").textContent = "Autorisation nécessaire";
+    note.textContent = "Dans l'écran d'Android qui s'ouvre, active « Autoriser l'accès pour gérer tous les fichiers » pour Eclipse, puis reviens ici.";
+  } else {
+    $("#share-sub").textContent = "Tes PC pourront voir ses fichiers et t'en envoyer.";
+    note.hidden = true;
+  }
+};
+$("#share-on").onchange = (e) => N.shareSet(e.target.checked);
+// The whole row switches it (not only the small switch).
+$(".share-head").onclick = (e) => {
+  if (e.target.closest(".switch")) return;
+  const c = $("#share-on");
+  c.checked = !c.checked;
+  N.shareSet(c.checked);
+};
+
 // Called by the Android back button: true when the page handled it.
 window.eclipseBack = () => {
   const open = $$(".sheet").find((s) => !s.hidden);
   if (open) {
     closeSheet(open.id);
+    return true;
+  }
+  if (tab === "files") {
+    if (fx && !fx.$sheet.hidden) { fx.closeSheet(); return true; }
+    if (fx && fx.path !== null) { fx.goUp(); return true; }
+    setTab("play");
     return true;
   }
   if (current) {
@@ -704,5 +810,17 @@ function demoNative() {
     diagnostic: () => later(() => window.ec.on("diag", "Eclipse 2.2.1 (aperçu)\nAndroid 14 (API 34), Google Pixel 7, arm64-v8a\nTailscale intégré : oui\nAucun arrêt anormal récent.\n")),
     copy: () => {},
     updateNow: () => {},
+    filesDevices: () => JSON.stringify([{ id: "a", name: "Lenovo", kind: "pc", online: true }, { id: "c", name: "PC-BUREAU", kind: "pc", online: false }]),
+    filesCall: (req, id, op, path) => later(() => window.ec.on("files", op === "roots"
+      ? { req, ok: true, data: { roots: [{ name: "Disque local (C:)", path: "C:\\", kind: "disk" }, { name: "Documents", path: "C:\\Users\\Marius\\Documents", kind: "folder" }, { name: "Téléchargements", path: "C:\\Users\\Marius\\Downloads", kind: "folder" }] } }
+      : { req, ok: true, data: { path, parent: "C:\\Users\\Marius", entries: [{ name: "Factures", dir: true, mtime: Date.now() - 864e5 }, { name: "Vacances 2026", dir: true, mtime: Date.now() - 9e8 }, { name: "CV Marius.pdf", size: 254000, mtime: Date.now() - 4e8 }, { name: "photo.jpg", size: 3400000, mtime: Date.now() }, { name: "musique.mp3", size: 5200000, mtime: Date.now() - 2e9 }] } }), 300),
+    filesDownload: (id, dev, path, name) => {
+      let p = 0;
+      const t = setInterval(() => { p += 20; window.ec.on("transfer", { id, name, dir: "down", pct: p, state: p >= 100 ? "done" : "run", uri: "content://x" }); if (p >= 100) clearInterval(t); }, 300);
+    },
+    filesPick: () => toast("Choix des fichiers…"),
+    filesView: () => {},
+    shareState: () => later(() => window.ec.on("share", { enabled: !!window.__share, access: true })),
+    shareSet: (on) => { window.__share = on; later(() => window.ec.on("share", { enabled: on, access: true })); },
   };
 }

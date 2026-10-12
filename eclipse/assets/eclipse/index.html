@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Eclipse</title>
+<link rel="stylesheet" href="files.css">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -28,6 +29,8 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-qr" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 18.5h2v1.5h-2zM18 14h2v2h-2z" fill="currentColor"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.2 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.2-3.5-8.5s1.1-6.1 3.5-8.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 13.5V8M9.5 10.5 12 8l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></symbol>
 </svg>
 
@@ -76,6 +79,23 @@
       </div>
     </div>
     <div class="games" id="games"></div>
+  </section>
+
+  <!-- Files -->
+  <section class="view" id="v-files" hidden>
+    <div class="hello">
+      <h1>Fichiers</h1>
+      <p class="muted">Les fichiers de tes PC, ici. Envoie-leur des fichiers de ce téléphone.</p>
+    </div>
+    <div class="panel share-card" id="share-card">
+      <div class="share-head">
+        <div class="tile sm"><svg><use href="#i-share"/></svg></div>
+        <div class="txt"><strong>Partager les fichiers de ce téléphone</strong><span id="share-sub">Tes PC pourront les voir et t'en envoyer.</span></div>
+        <label class="switch"><input type="checkbox" id="share-on"><i></i></label>
+      </div>
+      <p class="small muted" id="share-note" hidden></p>
+    </div>
+    <div id="fx-phone"></div>
   </section>
 </main>
 
@@ -219,12 +239,18 @@
   </div>
 </div>
 
+<nav class="btabs" id="btabs">
+  <button class="btab active" data-tab="play"><svg><use href="#i-game"/></svg><span>Jouer</span></button>
+  <button class="btab" data-tab="files"><svg><use href="#i-folder"/></svg><span>Fichiers</span></button>
+</nav>
+
 <div class="upd" id="upd" hidden>
   <span id="upd-text">Mise à jour d'Eclipse…</span>
   <div class="upd-bar" id="upd-bar"><div></div></div>
   <button class="btn primary pill-sm" id="upd-go" hidden>Mettre à jour</button>
 </div>
 <div class="toast" id="toast" hidden></div>
+<script src="files.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

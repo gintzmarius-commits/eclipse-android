@@ -137,6 +137,12 @@ for src_dir, dst_dir in (("eclipse/res", res),
             shutil.copyfile(f, dst)
             print(f"  copied {dst.relative_to(up)}")
 
+# 4a) The file browser is the same on the phone and on the PC (pc/ui).
+for name in ("files.js", "files.css"):
+    dst = app / "src/main/assets/eclipse" / name
+    shutil.copyfile(ROOT / "pc/ui" / name, dst)
+    print(f"  copied {dst.relative_to(up)}")
+
 # 4b) Pairing: the phone tells its real name to the PC (Moonlight sends
 #     "roth"), with the token of the QR code when there is one; a pairing
 #     waiting for the PC can be stopped.
@@ -240,6 +246,23 @@ ECLIPSE_ACTIVITY = """<activity
         <receiver
             android:name=".EclipseUpdate$Receiver"
             android:exported="false" />
+        <!-- Sharing this phone's files with its PCs (Eclipse 2.4) -->
+        <service
+            android:name=".EclipseShare"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shares this phone's files with the user's own computers, which ask for them through a request the phone keeps open." />
+        </service>
+        <receiver
+            android:name=".EclipseShare$Boot"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Built-in Tailscale, in its own process: if it ever fails,
              Eclipse itself stays open -->
         <provider
@@ -263,6 +286,20 @@ def manifest(t):
     # Eclipse updates itself (EclipseUpdate): Android's installer, and no
     # confirmation for the next updates once the first one was confirmed.
     t = must_sub(r"(\n    <application\b)", "\n    <uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\" />\n    <uses-permission android:name=\"android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION\" />\n\\1", t, count=1)
+    # File sharing (Eclipse 2.4): all the phone's files (Android 11+: "access
+    # to all files", given in Android's settings), a notification while it
+    # is on, and starting again with the phone.
+    perms = [
+        '<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />',
+        '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
+        '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />',
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />',
+        '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
+        '<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />',
+    ]
+    t = must_sub(r"(\n    <application\b)", "".join("\n    " + x for x in perms) + "\n\\1", t, count=1)
+    t = must_sub(r"(\n    <application\b)", "\\1 android:requestLegacyExternalStorage=\"true\"", t, count=1)
     return must_sub(r"(\n    <application\b)", "\n    <queries>\n        <package android:name=\"com.tailscale.ipn\" />\n    </queries>\n\\1", t, count=1)
 
 edit(app / "src/main/AndroidManifest.xml", manifest)

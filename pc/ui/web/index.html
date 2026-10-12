@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Eclipse — Fichiers</title>
+<link rel="icon" href="/logo.png">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/files.css">
+<style>
+  html, body { height: auto; min-height: 100%; }
+  body { overflow: auto; user-select: auto; padding: 0 16px 120px; }
+  .wtop { max-width: 980px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 2px 14px; }
+  .wbrand { display: flex; align-items: center; gap: 10px; font: 650 19px/1 var(--font-display); }
+  .wbrand img { width: 30px; height: 30px; border-radius: 9px; }
+  .wbrand span small { display: block; font: 500 12.5px/1.3 var(--font); color: var(--muted); margin-top: 2px; }
+  .wmain { max-width: 980px; margin: 0 auto; }
+  .wlogin { max-width: 420px; margin: 9vh auto 0; padding: 28px 26px; text-align: center; display: grid; gap: 14px; }
+  .wlogin img { width: 64px; height: 64px; border-radius: 18px; margin: 0 auto; }
+  .wlogin input { height: 52px; border-radius: 16px; border: 1px solid rgba(255,255,255,.9); background: rgba(255,255,255,.75);
+    text-align: center; font: 650 24px/1 ui-monospace, Consolas, monospace; letter-spacing: .14em; text-transform: lowercase; outline: none; width: 100%; }
+  .wlogin input:focus { border-color: var(--accent); }
+  .wlogin .btn { width: 100%; height: 46px; }
+  .wout { height: 34px; padding: 0 14px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="wtop">
+  <div class="wbrand"><img src="/logo.png" alt=""><span>Eclipse<small id="pcname"></small></span></div>
+  <button class="btn wout" id="out" hidden>Se déconnecter</button>
+</header>
+
+<main class="wmain">
+  <form class="panel wlogin" id="login" hidden>
+    <img src="/logo.png" alt="">
+    <h2>Fichiers de <span id="pcname2">ce PC</span></h2>
+    <p class="muted">Entre le code d'accès affiché sur le PC, dans Eclipse, onglet <b>Fichiers</b>.</p>
+    <input id="code" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="12" placeholder="xxxx-xxxx" aria-label="Code d'accès">
+    <p class="err" id="err"></p>
+    <button class="btn primary" type="submit">Ouvrir</button>
+  </form>
+  <div class="panel wlogin" id="off" hidden>
+    <img src="/logo.png" alt="">
+    <h2>Accès désactivé</h2>
+    <p class="muted">L'accès aux fichiers par navigateur est désactivé sur ce PC. Pour l'activer : Eclipse, onglet <b>Fichiers</b>, « Depuis un navigateur ».</p>
+  </div>
+  <div id="fx" hidden></div>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/files.js"></script>
+<script>
+"use strict";
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var H = { "X-Eclipse": "1" };
+  var browser = null, toastTimer;
+
+  function toast(msg, bad) {
+    var t = $("#toast");
+    t.textContent = msg; t.className = "toast" + (bad ? " bad" : ""); t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 3500);
+  }
+  function enc(s) { return encodeURIComponent(s); }
+  function signedOut(e) {
+    if (e && e.status === 401) { showLogin(); return true; }
+    return false;
+  }
+  function wrap(p) { return p.catch(function (e) { if (signedOut(e)) e.message = "Connexion nécessaire"; throw e; }); }
+
+  var adapter = {
+    empty: "Aucun appareil.",
+    devices: function () { return wrap(EclipseFiles.getJSON("/x/devices")).then(function (d) { return d.devices || []; }); },
+    roots: function (dev) { return wrap(EclipseFiles.getJSON("/x/" + dev.id + "/roots")); },
+    list: function (dev, path) { return wrap(EclipseFiles.getJSON("/x/" + dev.id + "/list?path=" + enc(path))); },
+    sep: function (dev, path) {
+      if (dev.kind !== "pc") return "/";
+      var p = path || "";
+      return /^[A-Za-z]:\\/.test(p) || (browser && browser.roots && browser.roots[0] && /^[A-Za-z]:\\/.test(browser.roots[0].path)) ? "\\" : "/";
+    },
+    download: function (dev, path, entry, ui) {
+      var a = document.createElement("a");
+      a.href = "/x/" + dev.id + "/get?path=" + enc(path);
+      a.download = entry.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      ui.toast("Téléchargement de « " + entry.name + " »…");
+    },
+    open: function (dev, path) {
+      window.open("/x/" + dev.id + "/get?inline=1&path=" + enc(path), "_blank", "noopener");
+    },
+    zip: function (dev, path) {
+      var a = document.createElement("a");
+      a.href = "/x/" + dev.id + "/zip?path=" + enc(path);
+      document.body.appendChild(a); a.click(); a.remove();
+      toast("Préparation du .zip : le téléchargement commence…");
+    },
+    upload: function (dev, dir, files, ui) {
+      return EclipseFiles.uploadAll(files, ui, function (f, pct) {
+        return EclipseFiles.xhrUpload("/x/" + dev.id + "/put?dir=" + enc(dir) + "&name=" + enc(f.name), f, H, pct);
+      }).then(function () { ui.refresh(dev, dir); });
+    }
+  };
+
+  function showLogin() {
+    $("#fx").hidden = true; $("#out").hidden = true; $("#off").hidden = true;
+    $("#login").hidden = false; $("#code").focus();
+  }
+  function showFiles() {
+    $("#login").hidden = true; $("#off").hidden = true;
+    $("#fx").hidden = false; $("#out").hidden = false;
+    if (!browser) browser = new EclipseFiles.Browser($("#fx"), adapter, { toast: toast });
+    browser.start();
+  }
+
+  function me() {
+    return EclipseFiles.getJSON("/me").then(function (m) {
+      $("#pcname").textContent = m.pc || ""; $("#pcname2").textContent = m.pc || "ce PC";
+      document.title = "Eclipse — " + (m.pc || "Fichiers");
+      if (!m.enabled) { $("#off").hidden = false; $("#login").hidden = true; $("#fx").hidden = true; return; }
+      if (m.signedIn) showFiles(); else showLogin();
+    }, function () { toast("Le PC ne répond pas.", true); });
+  }
+
+  $("#login").onsubmit = function (e) {
+    e.preventDefault();
+    $("#err").textContent = "";
+    fetch("/login", { method: "POST", headers: { "Content-Type": "application/json", "X-Eclipse": "1" }, body: JSON.stringify({ code: $("#code").value }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || "Erreur"); }); })
+      .then(function () { $("#code").value = ""; showFiles(); }, function (err) { $("#err").textContent = err.message; });
+  };
+  $("#out").onclick = function () {
+    fetch("/logout", { method: "POST", headers: H }).then(function () { location.reload(); });
+  };
+  // Phones appearing or leaving.
+  setInterval(function () { if (browser && !$("#fx").hidden && document.visibilityState === "visible") {
+    EclipseFiles.getJSON("/x/devices").then(function (d) {
+      var a = (d.devices || []).map(function (x) { return x.id + x.online; }).join(), b = browser.devs.map(function (x) { return x.id + x.online; }).join();
+      if (a !== b) browser.start();
+    }, function (e) { signedOut(e); });
+  } }, 8000);
+  me();
+})();
+</script>
+</body>
+</html>

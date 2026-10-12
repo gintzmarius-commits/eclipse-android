@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.Manifest;
+import android.content.ClipData;
+import android.provider.Settings;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -138,6 +141,7 @@ public class EclipseActivity extends Activity {
         EclipsePairing.init(this);
         EclipseTunnel.init(this);
         if (savedInstanceState == null) {
+            openFilesTab = "files".equals(getIntent().getStringExtra("tab"));
             takeQrLink(getIntent());
             checkUpdate(false);
         }
@@ -177,6 +181,8 @@ public class EclipseActivity extends Activity {
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     private void completeOnCreate() {
+        files = new EclipseFiles(this, this::emit);
+        EclipseShare.apply(this);
         UiHelper.setLocale(this);
         density = getResources().getDisplayMetrics().density;
         setupWindow();
@@ -208,6 +214,11 @@ public class EclipseActivity extends Activity {
                 pushComputers();
                 runPendingQr();
                 tunnelLast = "";
+                emitShare();
+                if (openFilesTab) {
+                    openFilesTab = false;
+                    emit("openTab", "{\"tab\":\"files\"}");
+                }
             }
         });
         web.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -267,6 +278,11 @@ public class EclipseActivity extends Activity {
         startUpdates();
         emit("resume", "{}");
         emitTailscale();
+        if (shareWanted && EclipseShare.hasAccess(this)) {
+            shareWanted = false;
+            EclipseShare.set(this, true);
+        }
+        emitShare();
         tunnelLast = "";
         tunnelWatch();
     }
@@ -282,12 +298,14 @@ public class EclipseActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         takeQrLink(intent);
+        if ("files".equals(intent.getStringExtra("tab"))) emit("openTab", "{\"tab\":\"files\"}");
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         artLoader.shutdownNow();
+        if (files != null) files.shutdown();
         pairJob.incrementAndGet();
         cancelPairHttp();
         pairExec.shutdownNow();
@@ -422,27 +440,9 @@ public class EclipseActivity extends Activity {
         }
     }
 
-    private final Object loopLock = new Object();
-
     /** Local address of a PC's relay on this phone (127.0.0.2 to .250), kept for good. */
     private String loopFor(String id) {
-        synchronized (loopLock) {
-            SharedPreferences p = prefs();
-            String v = p.getString("loop:" + id, null);
-            if (v != null) return v;
-            java.util.HashSet<Object> used = new java.util.HashSet<>();
-            for (Map.Entry<String, ?> e : p.getAll().entrySet()) {
-                if (e.getKey().startsWith("loop:")) used.add(e.getValue());
-            }
-            for (int n = 2; n <= 250; n++) {
-                String a = "127.0.0." + n;
-                if (!used.contains(a)) {
-                    p.edit().putString("loop:" + id, a).commit();
-                    return a;
-                }
-            }
-            return EclipseTunnel.LOCAL;
-        }
+        return EclipsePcFiles.loopFor(this, id);
     }
 
     // ---- built-in Tailscale ----
@@ -1556,10 +1556,165 @@ public class EclipseActivity extends Activity {
     }
 
     /** Methods the page can call (window.EclipseNative.xxx). */
+    // ------------------------------------------------------------------
+    // Files (Eclipse 2.4): the PCs' files here, this phone's files on the PCs
+    // ------------------------------------------------------------------
+
+    private EclipseFiles files;
+    private volatile boolean openFilesTab;
+    private volatile boolean shareWanted;
+    private String pickUuid, pickDir;
+    private Runnable afterStorage;
+    private static final int REQ_PICK = 7301, REQ_STORAGE = 7302, REQ_SHARE = 7303, REQ_NOTIF = 7304;
+
+    private void emitShare() {
+        JSONObject o = new JSONObject();
+        put(o, "enabled", EclipseShare.enabled(this));
+        put(o, "access", EclipseShare.hasAccess(this));
+        put(o, "waiting", shareWanted);
+        emit("share", o.toString());
+    }
+
+    private void shareOn(boolean on) {
+        if (!on) {
+            shareWanted = false;
+            EclipseShare.set(this, false);
+            emitShare();
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        }
+        if (EclipseShare.hasAccess(this)) {
+            EclipseShare.set(this, true);
+            emitShare();
+            return;
+        }
+        shareWanted = true;
+        emitShare();
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName())));
+            } catch (Exception e) {
+                startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+            }
+        } else {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_SHARE);
+        }
+    }
+
+    /** Android 8 and 9: saving in Downloads needs a permission. */
+    private void withStorage(Runnable r) {
+        if (Build.VERSION.SDK_INT >= 29 || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            r.run();
+            return;
+        }
+        afterStorage = r;
+        requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        boolean ok = grantResults.length > 0;
+        for (int g : grantResults) ok &= g == PackageManager.PERMISSION_GRANTED;
+        if (requestCode == REQ_STORAGE) {
+            Runnable r = afterStorage;
+            afterStorage = null;
+            if (ok && r != null) r.run();
+            else if (!ok) toastLong("Sans cette autorisation, Eclipse ne peut pas enregistrer les fichiers téléchargés.");
+        } else if (requestCode == REQ_SHARE) {
+            if (ok) {
+                shareWanted = false;
+                EclipseShare.set(this, true);
+            } else {
+                shareWanted = false;
+                toastLong("Sans cette autorisation, tes PC ne peuvent pas voir les fichiers de ce téléphone.");
+            }
+            emitShare();
+        }
+    }
+
+    private void toastLong(final String msg) {
+        runOnUiThread(() -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show());
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PICK) return;
+        if (resultCode != RESULT_OK || data == null || pickUuid == null || files == null) return;
+        List<Uri> uris = new ArrayList<>();
+        ClipData clip = data.getClipData();
+        if (clip != null) {
+            for (int i = 0; i < clip.getItemCount(); i++) uris.add(clip.getItemAt(i).getUri());
+        } else if (data.getData() != null) {
+            uris.add(data.getData());
+        }
+        if (!uris.isEmpty()) files.upload(pickUuid, pickDir, uris);
+    }
+
+    private Map<String, Boolean> onlineMap() {
+        Map<String, Boolean> m = new java.util.HashMap<>();
+        for (ComputerDetails d : computers.values()) {
+            if (d.state != null && d.uuid != null) m.put(d.uuid, d.state == ComputerDetails.State.ONLINE);
+        }
+        return m;
+    }
+
     private class Bridge {
         @JavascriptInterface
         public String version() {
             return BuildConfig.VERSION_NAME;
+        }
+
+        // ---- files ----
+
+        @JavascriptInterface
+        public String filesDevices() {
+            return files == null ? "[]" : files.devices(onlineMap());
+        }
+
+        @JavascriptInterface
+        public void filesCall(String req, String uuid, String op, String path) {
+            if (files != null) files.call(req, uuid, op, path);
+        }
+
+        @JavascriptInterface
+        public void filesDownload(final String id, final String uuid, final String path, final String name, final boolean open) {
+            if (files == null) return;
+            runOnUiThread(() -> withStorage(() -> files.download(id, uuid, path, name, open)));
+        }
+
+        @JavascriptInterface
+        public void filesPick(final String uuid, final String dir) {
+            runOnUiThread(() -> {
+                pickUuid = uuid;
+                pickDir = dir;
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("*/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                try {
+                    startActivityForResult(i, REQ_PICK);
+                } catch (Exception e) {
+                    toastLong("Impossible d'ouvrir le choix de fichiers.");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void filesView(String uri, String name) {
+            if (files != null) files.view(Uri.parse(uri), name);
+        }
+
+        @JavascriptInterface
+        public void shareSet(final boolean on) {
+            runOnUiThread(() -> shareOn(on));
+        }
+
+        @JavascriptInterface
+        public void shareState() {
+            emitShare();
         }
 
         /** "Mettre à jour" on the banner (mobile data: download on request). */

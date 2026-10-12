@@ -244,12 +244,13 @@ public final class EclipseTunnel {
 
     /**
      * Relays Sunshine's ports (base port 47989 by default) on 127.0.0.1 to
-     * the PC: HTTPS, HTTP, RTSP over TCP; video, control, audio, mic over UDP.
+     * the PC: HTTPS, HTTP, RTSP over TCP; video, control, audio, mic over UDP;
+     * and Eclipse's file sharing (48150).
      * Asking again for the same PC costs nothing.
      */
     public static void forward(String ip, int base) throws Exception {
         Bundle x = new Bundle();
-        x.putString("tcp", (base - 5) + "," + base + "," + (base + 21));
+        x.putString("tcp", (base - 5) + "," + base + "," + (base + 21) + "," + EclipsePcFiles.PORT);
         x.putString("udp", (base + 9) + "," + (base + 10) + "," + (base + 11) + "," + (base + 13));
         check(call("forward", ip, x));
     }
@@ -261,7 +262,7 @@ public final class EclipseTunnel {
     public static void forwardAt(String local, String ip, int base) throws Exception {
         Bundle x = new Bundle();
         x.putString("local", local);
-        x.putString("tcp", (base - 5) + "," + base + "," + (base + 21));
+        x.putString("tcp", (base - 5) + "," + base + "," + (base + 21) + "," + EclipsePcFiles.PORT);
         x.putString("udp", (base + 9) + "," + (base + 10) + "," + (base + 11) + "," + (base + 13));
         check(call("forwardAt", ip, x));
     }

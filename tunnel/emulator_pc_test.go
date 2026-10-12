@@ -85,30 +85,41 @@ func TestEmulatorPC(t *testing.T) {
 		t.Fatal(err)
 	}
 	pcIP := st.TailscaleIPs[0].String()
+	// Sunshine, pairing included (PIN of the test QR code); its folder is
+	// shared with Eclipse for PC run by the test (file sharing).
+	sun := newFakeSunshine(t, os.Getenv("ECLIPSE_FAKE_SUNSHINE"), "1234")
 	hl, err := pc.Listen("tcp", ":47989")
 	if err != nil {
 		t.Fatal(err)
 	}
-	go http.Serve(hl, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Logf("PC: %s %s", r.Method, r.URL.Path)
-		if r.URL.Path == "/serverinfo" {
-			w.Write([]byte(sunshineServerInfo))
-			return
-		}
-		// Pairing is not implemented by this PC: the phone shows an error.
-		w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?><root status_code="404" status_message="test PC"></root>`))
-	}))
-	echo, err := pc.Listen("tcp", ":47984")
+	go http.Serve(hl, sun.httpHandler())
+	sl, err := pc.Listen("tcp", ":47984")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go http.Serve(tls.NewListener(sl, sun.tlsConfig()), sun.httpsHandler())
+	// Eclipse's file sharing: Eclipse for PC listens on this machine.
+	fl, err := pc.Listen("tcp", ":48150")
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() {
 		for {
-			c, err := echo.Accept()
+			c, err := fl.Accept()
 			if err != nil {
 				return
 			}
-			go func(c net.Conn) { io.Copy(c, c); c.Close() }(c)
+			go func(c net.Conn) {
+				defer c.Close()
+				d, err := net.DialTimeout("tcp", "127.0.0.1:48150", 5*time.Second)
+				if err != nil {
+					t.Logf("PC: file sharing not reachable: %v", err)
+					return
+				}
+				defer d.Close()
+				go io.Copy(d, c)
+				io.Copy(c, d)
+			}(c)
 		}
 	}()
 

@@ -64,6 +64,9 @@ jobs:
           go-version: "1.27.x"
           cache: false
 
+      - name: Eclipse for PC (tests; its Linux build serves the emulator tests)
+        run: scripts/ci_run.sh "Eclipse pour PC" bash -c "cd pc && go vet . && GOOS=windows go vet . && go test -count=1 . && CGO_ENABLED=0 go build -o ../eclipse-pc ."
+
       - name: Built-in Tailscale (Go library for Android)
         run: scripts/ci_run.sh "Tailscale intégré" scripts/build_tunnel.sh moonlight/app/libs
 
@@ -118,6 +121,7 @@ jobs:
             Eclipse-emulator.apk
             tunnel-e2e.log
             fakepc.test
+            eclipse-pc
 
   emulator:
     # Eclipse used like a person would, on Android 8 to 16 (see
@@ -144,10 +148,17 @@ jobs:
         run: |
           # The emulator reaches this machine at 10.0.2.2: give it that address too.
           sudo ip addr add 10.0.2.2/32 dev lo
-          chmod +x apk/fakepc.test
-          ECLIPSE_FAKE_PC=/tmp/fakepc nohup apk/fakepc.test -test.run TestEmulatorPC -test.v -test.timeout 60m > /tmp/fakepc.log 2>&1 &
+          chmod +x apk/fakepc.test apk/eclipse-pc
+          mkdir -p /tmp/sun /tmp/pchome/Documents /tmp/pcdl
+          echo "Rapport de test Eclipse" > /tmp/pchome/Documents/rapport-eclipse.txt
+          ECLIPSE_FAKE_PC=/tmp/fakepc ECLIPSE_FAKE_SUNSHINE=/tmp/sun nohup apk/fakepc.test -test.run TestEmulatorPC -test.v -test.timeout 60m > /tmp/fakepc.log 2>&1 &
           for i in $(seq 1 90); do [ -s /tmp/fakepc ] && break; sleep 1; done
           cat /tmp/fakepc || { tail -30 /tmp/fakepc.log; echo "::warning::PC de test indisponible"; }
+          # Eclipse for PC itself (file sharing), with the test PC's Sunshine folder.
+          HOME=/tmp/pchome XDG_CONFIG_HOME=/tmp/pchome/.config XDG_STATE_HOME=/tmp/pchome/.state ECLIPSE_SUNSHINE_CONFIG=/tmp/sun \
+            ECLIPSE_NOWINDOW=1 ECLIPSE_NO_SETUP=1 ECLIPSE_DOWNLOADS=/tmp/pcdl nohup apk/eclipse-pc > /tmp/eclipse-pc.out 2>&1 &
+          for i in $(seq 1 30); do grep -q "t=" /tmp/eclipse-pc.out && break; sleep 1; done
+          cat /tmp/eclipse-pc.out
       - name: Android ${{ matrix.api }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -157,7 +168,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: FAKE_PC=/tmp/fakepc FAKE_PC_LOG=/tmp/fakepc.log bash scripts/smoke_test.sh apk/Eclipse-emulator.apk out
+          script: FAKE_PC=/tmp/fakepc FAKE_PC_LOG=/tmp/fakepc.log PC_URL_FILE=/tmp/eclipse-pc.out PC_DOWNLOADS=/tmp/pcdl bash scripts/smoke_test.sh apk/Eclipse-emulator.apk out
       - name: Results
         if: always()
         run: |
@@ -168,6 +179,7 @@ jobs:
           fi
           touch /tmp/fakepc.stop
           cp /tmp/fakepc.log out/ 2>/dev/null || true
+          cp /tmp/pchome/.state/eclipse-stream/eclipse.log out/eclipse-pc.log 2>/dev/null || true
           tar czf "emulator-api${{ matrix.api }}.tgz" out || true
       - uses: actions/upload-artifact@v4
         if: always()

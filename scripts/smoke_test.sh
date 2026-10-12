@@ -288,6 +288,14 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   # The relay of this PC listens on 127.0.0.2:47989 (0200007F:BB75 in /proc).
   if adb shell cat /proc/net/tcp | grep -qi "0200007F:BB75 00000000:0000 0A"; then note "OK relais du PC sur 127.0.0.2"
   else fail "pas de relais sur 127.0.0.2"; fi
+  # The test PC pairs for real (same protocol as Sunshine, PIN of the QR code).
+  PAIRED=0
+  for i in $(seq 1 60); do
+    if grep -q 'paired$' "${FAKE_PC_LOG:-/dev/null}" 2>/dev/null; then PAIRED=1; break; fi
+    sleep 1
+  done
+  if [ $PAIRED = 1 ]; then note "OK le téléphone est connecté au PC par Tailscale (après $i s)"
+  else fail "le téléphone ne s'est pas connecté au PC par Tailscale"; fi
   home_screen
   if wait_text "Lenovo 500w Gen 5" 30; then note "OK le PC trouvé par Tailscale est dans la liste"
   else fail "le PC trouvé par Tailscale n'est pas dans la liste"; fi
@@ -298,6 +306,96 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   else
     note "OK aucun plantage avec Tailscale"
   fi
+fi
+
+
+# ---------------------------------------------------------------- part 5
+# File sharing with Eclipse for PC (the real one, running on the machine
+# hosting the emulator, reached through the test PC on Tailscale like from
+# away): the phone browses and downloads the PC's files; the PC sees the
+# phone's files, sends one and downloads one.
+if [ $TUNNEL = 1 ] && [ "${PAIRED:-0}" = 1 ] && [ -n "${PC_URL_FILE:-}" ] && [ -s "$PC_URL_FILE" ]; then
+  note "== 5. Partage de fichiers"
+  P5_FROM=$(wc -l < "$OUT/logcat.txt")
+  PCURL=$(grep -o 'http://127.0.0.1:[0-9]*/?t=[0-9a-f]*' "$PC_URL_FILE" | head -1)
+  PCBASE=${PCURL%%/?t=*}
+  PCTOKEN=${PCURL##*t=}
+  pcapi() { curl -s -m 90 -H "X-Token: $PCTOKEN" "$@"; }
+  [ "$API" -lt 29 ] && adb shell pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
+  home_screen
+  if tap "=Fichiers" && wait_text "Dossier personnel" 60; then
+    note "OK le téléphone voit les dossiers du PC"
+    shot 14-files-roots
+    if tap "=Documents" && wait_text "rapport-eclipse.txt" 40; then
+      note "OK dossier du PC ouvert"
+      tap "rapport-eclipse.txt" && wait_text "=Télécharger" 10 && tap "=Télécharger"
+      ok=0
+      for i in $(seq 1 40); do
+        sleep 1
+        if adb shell cat /sdcard/Download/Eclipse/rapport-eclipse.txt 2>/dev/null | grep -q "Rapport de test Eclipse"; then ok=1; break; fi
+      done
+      shot 15-files-download
+      if [ $ok = 1 ]; then note "OK fichier du PC téléchargé sur le téléphone (après $i s)"
+      else fail "le fichier du PC n'a pas été téléchargé sur le téléphone"; fi
+    else
+      fail "le dossier Documents du PC ne s'ouvre pas"; shot 15-files-download
+    fi
+  else
+    fail "le téléphone ne voit pas les fichiers du PC"; shot 14-files-roots
+  fi
+
+  # This phone's files, seen from the PC.
+  if [ "$API" -ge 30 ]; then
+    adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow > /dev/null 2>&1
+  else
+    adb shell pm grant $PKG android.permission.READ_EXTERNAL_STORAGE > /dev/null 2>&1
+    adb shell pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
+  fi
+  [ "$API" -ge 33 ] && adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS > /dev/null 2>&1
+  adb shell "mkdir -p /sdcard/Download && echo 'Photo du telephone' > /sdcard/Download/eclipse-phone.txt"
+  tap "Partager les fichiers" > /dev/null
+  PHID=""
+  for i in $(seq 1 90); do
+    sleep 1
+    PHID=$(pcapi "$PCBASE/api/x/devices" | python3 -c 'import json,sys
+d=[x for x in json.load(sys.stdin).get("devices",[]) if x.get("online")]
+print(d[0]["id"] if d else "")' 2>/dev/null)
+    [ -n "$PHID" ] && break
+  done
+  shot 16-files-share
+  if [ -n "$PHID" ]; then
+    note "OK le PC voit le téléphone (après $i s)"
+    if pcapi "$PCBASE/api/x/$PHID/list?path=/storage/emulated/0/Download" | grep -q eclipse-phone.txt; then
+      note "OK le PC liste les fichiers du téléphone"
+    else
+      fail "le PC ne liste pas les fichiers du téléphone"
+    fi
+    echo "Envoye depuis le PC" > "$OUT/depuis-le-pc.txt"
+    pcapi -X POST --data-binary @"$OUT/depuis-le-pc.txt" "$PCBASE/api/x/$PHID/put?dir=/storage/emulated/0/Download&name=depuis-le-pc.txt" > "$OUT/put.json"
+    if adb shell cat /sdcard/Download/depuis-le-pc.txt 2>/dev/null | grep -q "Envoye depuis le PC"; then
+      note "OK fichier envoyé du PC au téléphone"
+    else
+      fail "le fichier envoyé par le PC n'est pas sur le téléphone ($(head -c 200 "$OUT/put.json"))"
+    fi
+    pcapi -X POST -H "Content-Type: application/json" -d '{"path":"/storage/emulated/0/Download/eclipse-phone.txt"}' "$PCBASE/api/x/$PHID/fetch" > "$OUT/fetch.json"
+    if grep -q "Photo du telephone" "${PC_DOWNLOADS:-/nonexistent}/eclipse-phone.txt" 2>/dev/null; then
+      note "OK fichier du téléphone téléchargé sur le PC"
+    else
+      fail "le fichier du téléphone n'a pas été téléchargé sur le PC ($(head -c 200 "$OUT/fetch.json"))"
+    fi
+    if adb shell dumpsys notification 2>/dev/null | grep -q "Fichiers partagés"; then note "OK notification du partage affichée"
+    else note "  (notification du partage non vue)"; fi
+  else
+    fail "le PC ne voit pas le téléphone"
+    adb shell dumpsys activity services $PKG > "$OUT/services.txt" 2>&1
+  fi
+  wait_alive 3 "partage de fichiers"
+  tail -n +"$((P5_FROM + 1))" "$OUT/logcat.txt" > "$OUT/logcat-part5.txt"
+  if eclipse_crashes "$OUT/logcat-part5.txt" > "$OUT/part5-crashes.txt"; then
+    fail "plantage pendant le partage de fichiers : $(head -1 "$OUT/part5-crashes.txt")"
+  fi
+  # Sharing off again for the next part.
+  adb shell am stopservice -n $PKG/com.limelight.EclipseShare > /dev/null 2>&1
 fi
 
 # ---------------------------------------------------------------- part 4
