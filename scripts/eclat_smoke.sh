@@ -37,10 +37,11 @@ clear_anr() {
   adb shell input tap $xy
   note "  (fenêtre « ne répond pas » du système fermée)"
   sleep 2
-  adb shell am start -n $PKG/.MainActivity > /dev/null 2>&1
-  sleep 2
+  # back to Éclat, only while testing its main screen (not over the island)
+  if [ "$RELAUNCH" = 1 ]; then adb shell am start -n $PKG/.MainActivity > /dev/null 2>&1; sleep 2; fi
   return 0
 }
+RELAUNCH=1
 wait_text() { # <text> <seconds>
   local end=$((SECONDS + $2))
   while [ $SECONDS -lt $end ]; do
@@ -134,6 +135,7 @@ if wait_text "Download" 8 || wait_text "DCIM" 4; then note "OK dossiers affiché
 fi
 
 # 2) receiving a file "by NFC"
+RELAUNCH=0
 java -cp "$CLASSES" ShareHost "$OUT/test.jpg" image/jpeg 120 10.0.2.2 > "$OUT/sender.txt" 2>&1 &
 SENDER=$!
 for i in $(seq 1 20); do [ -s "$OUT/sender.txt" ] && break; sleep 0.5; done
@@ -163,6 +165,9 @@ if wait_text "Accepter" 25; then
 else
   shot 5-no-island
   fail "l'île de réception ne s'affiche pas"
+  note "  à l'écran : $(grep -o 'text="[^"]*"' "$OUT/5-no-island.xml" | grep -v 'text=""' | head -30 | tr '\n' ' ')"
+  note "  envoyeur : $(tr '\n' '|' < "$OUT/sender.txt")"
+  note "  système : $(adb logcat -d 2>/dev/null | grep -iE "ReceiveActivity|eclat|START u0" | grep -v EclatJS | tail -8 | cut -c1-200 | tr '\n' '|')"
 fi
 kill $SENDER 2>/dev/null
 
