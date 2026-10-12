@@ -139,7 +139,7 @@ const handlers = {
       $("#upd-text").textContent = `Mise à jour vers Eclipse ${ev.version}… ${ev.percent} %`;
       $("#upd-bar div").style.width = ev.percent + "%";
     } else if (ev.stage === "install") {
-      $("#upd-text").textContent = `Installation d'Eclipse ${ev.version}… Eclipse va redémarrer.`;
+      $("#upd-text").textContent = `Installation d'Eclipse ${ev.version}… Si Android le demande, autorise Eclipse à installer (une seule fois) puis confirme.`;
     } else if (ev.stage === "error") {
       box.hidden = true;
       return toast(ev.error || "La mise à jour a échoué.", true, 5000);

@@ -293,7 +293,9 @@ BEFORE=$(adb shell dumpsys package $PKG | grep -m1 lastUpdateTime | tr -d '\r')
 launch; sleep 2
 CTX=$(adb shell stat -c %C /data/data/$PKG | tr -d '\r')
 OWN=$(adb shell stat -c %u:%g /data/data/$PKG | tr -d '\r')
-adb shell "mkdir -p /data/data/$PKG/files && echo 'http://10.0.2.2:48300/latest' > /data/data/$PKG/files/test-update-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files"
+adb shell "mkdir -p /data/data/$PKG/files && echo 'http://10.0.2.2:48300/latest' > /data/data/$PKG/files/test-update-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files; restorecon -R /data/data/$PKG/files"
+# The permission a person gives once ("install unknown apps": Eclipse).
+adb shell appops set $PKG REQUEST_INSTALL_PACKAGES allow > /dev/null 2>&1
 adb shell am force-stop "$PKG"
 sleep 1
 launch
