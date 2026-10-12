@@ -1,0 +1,30 @@
+name: Publish a build already tested on the emulators
+
+# Pushing publish/<anything> publishes the APK of the private test build
+# ("test-build"), after checking it is the expected one.
+on:
+  push:
+    branches: ["publish/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BUILD: "95c8303"
+        run: |
+          VERSION=$(cat VERSION)
+          TITLE=$(gh release view test-build --json name --jq .name)
+          echo "$TITLE"
+          case "$TITLE" in *"$VERSION, $EXPECTED_BUILD"*) ;; *) echo "::error::build de test inattendu : $TITLE"; exit 1;; esac
+          gh release download test-build -p Eclipse.apk -D apk
+          python3 scripts/check_apk.py apk/Eclipse.apk "$VERSION" E4:AD:E3:BA:64:AE:04:E2:D7:B9:9B:0B:19:77:A0:AF:72:F2:80:B9:37:8A:12:FF:50:DD:62:39:00:17:1D:9F
+          gh release delete "v$VERSION" -y --cleanup-tag 2>/dev/null || true
+          gh release create "v$VERSION" apk/Eclipse.apk --target "$GITHUB_SHA" \
+            --title "Eclipse $VERSION" --notes-file RELEASE_NOTES.md --latest
