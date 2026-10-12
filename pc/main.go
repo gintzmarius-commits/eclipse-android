@@ -10,6 +10,16 @@ import (
 )
 
 func main() {
+	cmd := ""
+	if len(os.Args) > 1 {
+		cmd = os.Args[1]
+	}
+	background := hasArg("--background")
+	// One Eclipse at a time: the one running shows its window (checked
+	// before writing anything in the log file of the one running).
+	if cmd != "--uninstall" && cmd != "--update" && !installMode() && handOff(background) {
+		return
+	}
 	setupLog()
 
 	if len(os.Args) > 1 && os.Args[1] == "--uninstall" {
@@ -27,13 +37,8 @@ func main() {
 		return
 	}
 
-	background := hasArg("--background")
 	core := newAppState()
 	if !installMode() {
-		// One Eclipse at a time: the one running shows its window.
-		if handOff(background) {
-			return
-		}
 		core.updatedFrom = migrateData()
 	}
 	token := randHex(16)
@@ -45,6 +50,7 @@ func main() {
 	port := ln.Addr().(*net.TCPAddr).Port
 	go func() { _ = http.Serve(ln, core.routes(token)) }()
 
+	windowOpen.Store(!background)
 	if !installMode() {
 		writeInstance(port, token)
 		if os.Getenv("ECLIPSE_NO_SETUP") != "1" { // tests: only file sharing
@@ -52,6 +58,7 @@ func main() {
 		}
 		go core.files.start()
 		go ensureAutostart()
+		go core.updateTimer()
 	}
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/?t=%s", port, token)
@@ -71,6 +78,8 @@ func main() {
 				return
 			}
 			core.waitShow()
+			windowOpen.Store(true)
+			go core.autoUpdate() // each time Eclipse is opened
 		}
 		windowOpen.Store(true)
 		runWindow(url, core)

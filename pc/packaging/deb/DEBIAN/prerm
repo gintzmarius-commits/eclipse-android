@@ -1,0 +1,7 @@
+#!/bin/sh
+# Eclipse may run in the background (file sharing): close it when removed.
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+  pkill -x eclipse-stream 2>/dev/null || true
+fi
+exit 0

@@ -1,0 +1,21 @@
+Package: eclipse-stream
+Version: 2.3.0
+Architecture: amd64
+Maintainer: Eclipse <eclipse-stream@localhost>
+Installed-Size: 7480
+Depends: python3
+Recommends: python3-gi, gir1.2-webkit2-4.1, zenity, pkexec | policykit-1, libfuse2t64 | libfuse2, curl
+Replaces: streamfacile
+Conflicts: streamfacile
+Breaks: streamfacile
+Provides: streamfacile
+Section: games
+Priority: optional
+Homepage: https://github.com/LizardByte/Sunshine
+Description: Streame tes jeux sur ton téléphone, sans prise de tête
+ Eclipse (anciennement StreamFacile) installe et règle Sunshine tout seul,
+ puis connecte ton téléphone en scannant un QR code avec l'appli Eclipse
+ (ou avec Moonlight et un code à 4 chiffres).
+ Il installe aussi Moonlight pour jouer sur ce PC aux jeux d'un autre PC,
+ et Tailscale pour jouer à ce PC depuis n'importe où, même en 4G.
+ Il partage aussi les fichiers entre ce PC, tes téléphones et un navigateur.

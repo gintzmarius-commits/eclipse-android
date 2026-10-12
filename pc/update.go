@@ -371,6 +371,11 @@ func (a *Core) autoUpdate() {
 	if !updateSupported() || os.Getenv("ECLIPSE_NO_AUTO_UPDATE") == "1" {
 		return
 	}
+	// Ubuntu asks for the password: only while the window is shown, never
+	// out of the blue when Eclipse runs in the background.
+	if runtime.GOOS == "linux" && !windowOpen.Load() && os.Getenv("ECLIPSE_NOWINDOW") != "1" {
+		return
+	}
 	a.fetchVersions(true)
 	u := &a.upd
 	u.mu.Lock()

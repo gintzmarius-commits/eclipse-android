@@ -256,7 +256,8 @@ final class EclipsePcFiles {
                 last = e;
             }
         }
-        throw new Exception("PC injoignable" + (last == null ? "" : " (" + last.getMessage() + ")"));
+        if (last != null) LimeLog.info("Eclipse: files: " + p.name + " not reachable: " + last);
+        throw new java.io.IOException("le PC ne répond pas : vérifie qu'il est allumé, avec Eclipse 2.4 ou plus récent");
     }
 
     static void forget(String uuid) {

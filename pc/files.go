@@ -1010,7 +1010,10 @@ func (s *fileServer) handler() http.Handler {
 			w.Header().Set("Content-Length", strconv.FormatInt(j.Size, 10))
 		}
 		_, err := io.Copy(w, j.blob)
-		j.blobDone <- err
+		select {
+		case j.blobDone <- err:
+		default:
+		}
 	})
 	mux.HandleFunc("POST /p/reply/{id}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := s.identify(w, r)

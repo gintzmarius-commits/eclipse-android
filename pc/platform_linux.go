@@ -474,7 +474,9 @@ func runWindow(url string, core *Core) {
 			werr = c.Wait()
 		}
 		out := outBuf.String()
-		if werr == nil || time.Since(start) > 8*time.Second {
+		var ee *exec.ExitError
+		killed := errors.As(werr, &ee) && !ee.Exited() // closed by a signal
+		if werr == nil || killed || strings.Contains(out, "eclipse-window-shown") || time.Since(start) > 8*time.Second {
 			return // the window was shown and then closed
 		}
 		log.Printf("native window unavailable: %v %s", werr, out)

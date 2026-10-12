@@ -164,3 +164,14 @@ func keepRunning() bool {
 func (a *Core) waitShow() {
 	<-a.show
 }
+
+// updateTimer: Eclipse may stay on for days in the background; new
+// versions are looked for twice a day (Windows installs them silently).
+func (a *Core) updateTimer() {
+	for {
+		time.Sleep(12 * time.Hour)
+		if !windowOpen.Load() {
+			a.autoUpdate()
+		}
+	}
+}

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Eclipse
+GenericName=Streaming de jeux
+Comment=Streame tes jeux sur ton téléphone avec Moonlight
+Exec=eclipse-stream
+Icon=eclipse-stream
+Terminal=false
+Categories=Game;Network;
+Keywords=moonlight;sunshine;stream;jeux;streamfacile;
+StartupWMClass=eclipse-stream
+StartupNotify=true
