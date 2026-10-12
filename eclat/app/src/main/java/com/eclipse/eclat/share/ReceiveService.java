@@ -93,7 +93,7 @@ public class ReceiveService extends Service {
         String me = Net.deviceName(this);
         Fetch.Opener opener = Fetch.DEFAULT;
         Inbox.publish("connecting");
-        if (host == null) host = Fetch.findHost(opener, link, me, 2500);
+        if (host == null) host = Fetch.findHost(opener, link, me, 6000);
         if (host == null && offer.ssid != null) {
             Inbox.publish("joining");
             final Network net = joinHotspot(offer.ssid, offer.pass);

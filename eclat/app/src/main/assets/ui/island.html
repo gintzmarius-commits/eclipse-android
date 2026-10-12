@@ -150,13 +150,9 @@ window.island = {
     } else if (!t.querySelector('img')) {
       t.innerHTML = `<svg><use href="#${kindIcon(o.mime)}"/></svg>`;
     }
-    if (!o.reachable && !o.checking) {
-      msg(`Les deux téléphones doivent être sur le même Wi-Fi.`);
-      actions([['Fermer', () => dismiss()]]);
-    } else {
-      msg(o.checking ? '' : (o.hotspot && o.reachable === true ? '' : ''));
-      actions([['Refuser', () => dismiss(N.decline)], ['Accepter', () => { N.accept(); island.state({ phase: 'connecting' }); }, true]]);
-    }
+    // Accept is always offered: the download tries again, and says so if it can't.
+    msg(!o.reachable && !o.checking ? 'Pas de réponse pour l\'instant : les deux téléphones doivent être sur le même Wi-Fi.' : '');
+    actions([['Refuser', () => dismiss(N.decline)], ['Accepter', () => { N.accept(); island.state({ phase: 'connecting' }); }, true]]);
     if (first) setTimeout(grow, 350); else grow();
   },
 

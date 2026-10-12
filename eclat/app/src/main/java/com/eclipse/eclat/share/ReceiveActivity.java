@@ -120,7 +120,10 @@ public class ReceiveActivity extends Activity implements Inbox.Watcher {
 
     /** Says hello to the sender (it shows "asking...") and gets a preview. */
     private void probe(final Inbox.Offer o) {
-        final String h = Fetch.findHost(Fetch.DEFAULT, o.link, Net.deviceName(this), 1800);
+        String h0 = Fetch.findHost(Fetch.DEFAULT, o.link, Net.deviceName(this), 3000);
+        // a slow network: once more, with more patience
+        if (h0 == null) h0 = Fetch.findHost(Fetch.DEFAULT, o.link, Net.deviceName(this), 8000);
+        final String h = h0;
         String thumb = null;
         if (h != null && (o.link.mime.startsWith("image/") || o.link.mime.startsWith("video/") || o.link.mime.startsWith("audio/"))) {
             byte[] t = Fetch.get(Fetch.DEFAULT, o.link.base(h) + "/thumb", 3000, 2 << 20);
