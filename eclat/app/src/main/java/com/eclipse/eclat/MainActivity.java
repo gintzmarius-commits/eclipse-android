@@ -87,7 +87,16 @@ public class MainActivity extends Activity implements SendService.Watcher {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         web.addJavascriptInterface(new Bridge(), "EclatNative");
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+                // page errors in the log (read by the emulator tests)
+                if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                    android.util.Log.w("EclatJS", m.message() + " @" + m.lineNumber());
+                }
+                return true;
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {

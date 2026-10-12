@@ -94,7 +94,11 @@ shot 1-photos
 tap "Vidéos" && sleep 2 && shot 2-videos
 tap "Musique" && sleep 2 && shot 3-music
 tap "Fichiers" && sleep 2 && shot 4-files
-if wait_text "Download" 8 || wait_text "DCIM" 4; then note "OK dossiers affichés"; else fail "les dossiers ne s'affichent pas"; fi
+if wait_text "Download" 8 || wait_text "DCIM" 4; then note "OK dossiers affichés"; else
+  fail "les dossiers ne s'affichent pas"
+  note "  à l'écran : $(grep -o 'text="[^"]*"' "$OUT/wait.xml" | head -40 | tr '\n' ' ')"
+  note "  erreurs de la page : $(adb logcat -d -s EclatJS:W | tail -5 | tr '\n' ' ')"
+fi
 
 # 2) receiving a file "by NFC"
 java -cp "$CLASSES" ShareHost "$OUT/test.jpg" image/jpeg 120 10.0.2.2 > "$OUT/sender.txt" 2>&1 &
