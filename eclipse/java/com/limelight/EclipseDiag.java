@@ -38,6 +38,8 @@ public final class EclipseDiag {
         b.append("Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append("), ")
                 .append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append(", ")
                 .append(android.text.TextUtils.join(",", Build.SUPPORTED_ABIS)).append('\n');
+        String upd = EclipseUpdate.last(c);
+        if (!upd.isEmpty()) b.append("Mises à jour : ").append(upd).append("\n");
         b.append("Tailscale intégré : ").append(EclipseTunnel.available() ? "oui"
                 : EclipseTunnel.failedHere() ? "arrêté (trop d'échecs)" : "non").append('\n');
         exits(c, b);

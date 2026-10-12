@@ -38,6 +38,20 @@ public final class EclipseUpdate {
     }
 
     private static volatile boolean busy;
+
+    /** Last result, shown in the settings and the technical report. */
+    static void note(Context c, String text) {
+        c.getSharedPreferences("eclipse", Context.MODE_PRIVATE).edit()
+                .putLong("upd_at", System.currentTimeMillis()).putString("upd_text", text).apply();
+    }
+
+    static String last(Context c) {
+        android.content.SharedPreferences p = c.getSharedPreferences("eclipse", Context.MODE_PRIVATE);
+        long at = p.getLong("upd_at", 0);
+        if (at == 0) return "";
+        String when = new java.text.SimpleDateFormat("dd/MM HH:mm", Locale.FRANCE).format(new java.util.Date(at));
+        return p.getString("upd_text", "") + " (vérifié le " + when + ")";
+    }
     private static volatile JSONObject pending; // newer version waiting for a tap (mobile data)
 
     private EclipseUpdate() {
@@ -103,6 +117,7 @@ public final class EclipseUpdate {
             String cur = current(c);
             if (ver.isEmpty() || !newer(ver, cur)) {
                 LimeLog.info("Eclipse: up to date (" + cur + ", latest " + ver + ")");
+                note(c, "à jour");
                 return;
             }
             JSONObject asset = null;
@@ -111,10 +126,14 @@ public final class EclipseUpdate {
                 JSONObject a = as.optJSONObject(i);
                 if (a != null && "Eclipse.apk".equals(a.optString("name"))) asset = a;
             }
-            if (asset == null) return;
+            if (asset == null) {
+                note(c, "Eclipse " + ver + " publié sans fichier pour Android");
+                return;
+            }
             long size = asset.optLong("size", 0);
             if (!userAsked && metered(c)) {
                 pending = rel;
+                note(c, "Eclipse " + ver + " disponible : s'installe sur le Wi-Fi, ou touche « Mettre à jour »");
                 l.onUpdate(ev("available", ver, 0, null, size));
                 return;
             }
@@ -133,9 +152,11 @@ public final class EclipseUpdate {
                 throw new Exception("ce n'est pas Eclipse " + ver);
             }
             l.onUpdate(ev("install", ver, 100, null, size));
+            note(c, "Eclipse " + ver + " confié à l'installateur d'Android");
             install(c, apk);
         } catch (Throwable t) {
             LimeLog.warning("Eclipse: update: " + t);
+            note(c, "échec : " + t.getMessage());
             if (userAsked) l.onUpdate(ev("error", "", 0, "La mise à jour a échoué : " + t.getMessage(), 0));
         } finally {
             busy = false;

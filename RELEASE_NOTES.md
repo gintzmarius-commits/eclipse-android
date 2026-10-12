@@ -1,7 +1,4 @@
-**Eclipse pour Android 3.0.0** : un nouveau look, tout en mouvement.
+**Eclipse pour Android 3.0.1** : les mises à jour automatiques arrivent vraiment toutes seules.
 
-- **Animation d'ouverture** : à chaque lancement, le logo d'Eclipse apparaît dans la nuit avec sa couronne dorée, puis l'appli s'ouvre en douceur, comme une fenêtre sur macOS. Touche l'écran pour la passer.
-- **Fond vivant** : les couleurs floues du fond tournent lentement, chacune sur son propre cercle, à sa vitesse et dans son sens.
-- Les listes de fichiers et les fenêtres apparaissent avec de petites animations.
-- **Plus léger** : rien ne bouge ni ne se dessine quand l'appli n'est pas à l'écran (pendant que tu joues, par exemple). Sur les téléphones modestes, le fond reste animé mais l'effet de verre est simplifié. Les grands dossiers s'affichent plus vite.
-- Si tu as demandé à Android de réduire les animations, Eclipse les coupe aussi.
+- Eclipse cherchait une nouvelle version seulement quand il démarrait complètement. Comme Android le garde souvent en mémoire, ça pouvait ne jamais arriver. Maintenant, il vérifie aussi chaque fois que tu reviens dans l'appli (au plus toutes les 10 minutes) et toutes les 30 minutes quand il est à l'écran.
+- Dans les Réglages, tout en bas : le résultat de la dernière vérification (à jour, disponible, échec…) avec sa date. Il figure aussi dans le rapport technique.

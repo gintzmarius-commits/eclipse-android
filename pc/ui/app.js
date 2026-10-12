@@ -369,6 +369,9 @@ function renderVersions() {
     if (v.phase === "restart") restarting = true;
   }
   $("#ver-err").textContent = v.installError || v.error || "";
+  $("#ver-last").textContent = v.lastCheck
+    ? `Mise à jour automatique : ${v.lastText || "vérifiée"} (dernière vérification le ${v.lastCheck}). Eclipse vérifie à chaque ouverture et toutes les 30 minutes.`
+    : "";
 
   const list = v.versions || [];
   if (!list.length) {

@@ -165,13 +165,12 @@ func (a *Core) waitShow() {
 	<-a.show
 }
 
-// updateTimer: Eclipse may stay on for days in the background; new
-// versions are looked for twice a day (Windows installs them silently).
+// updateTimer: Eclipse may stay open (or in the background) for days: new
+// versions are looked for every 30 minutes. Windows installs them silently;
+// Ubuntu only while the window is shown (it asks for the password).
 func (a *Core) updateTimer() {
 	for {
-		time.Sleep(12 * time.Hour)
-		if !windowOpen.Load() {
-			a.autoUpdate()
-		}
+		time.Sleep(30 * time.Minute)
+		a.autoUpdate()
 	}
 }

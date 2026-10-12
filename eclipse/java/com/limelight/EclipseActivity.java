@@ -220,6 +220,7 @@ public class EclipseActivity extends Activity {
                 runPendingQr();
                 tunnelLast = "";
                 emitShare();
+                emitUpdState();
                 if (openFilesTab) {
                     openFilesTab = false;
                     emit("openTab", "{\"tab\":\"files\"}");
@@ -284,6 +285,13 @@ public class EclipseActivity extends Activity {
         startUpdates();
         emit("resume", "{}");
         emitTailscale();
+        // Eclipse often stays in memory: each return to it looks for a new
+        // version too (at most every 10 minutes), and every 30 minutes on screen.
+        if (lastUpdateCheck != 0 && System.currentTimeMillis() - lastUpdateCheck > 10 * 60 * 1000L) {
+            checkUpdate(false);
+        }
+        updateTimer.removeCallbacks(updateTick);
+        updateTimer.postDelayed(updateTick, 30 * 60 * 1000L);
         if (shareWanted && EclipseShare.hasAccess(this)) {
             shareWanted = false;
             EclipseShare.set(this, true);
@@ -297,6 +305,7 @@ public class EclipseActivity extends Activity {
     protected void onPause() {
         super.onPause();
         inForeground = false;
+        updateTimer.removeCallbacks(updateTick);
         // Off screen (or while a game streams): the page stops drawing.
         if (web != null) web.onPause();
         stopUpdates(false);
@@ -1509,7 +1518,25 @@ public class EclipseActivity extends Activity {
     // ------------------------------------------------------------------
 
     /** New version of Eclipse: checked each time Eclipse opens. */
+    /** Last automatic check (for the whole app process). */
+    private static volatile long lastUpdateCheck;
+    private final android.os.Handler updateTimer = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable updateTick = new Runnable() {
+        @Override
+        public void run() {
+            if (inForeground) checkUpdate(false);
+            updateTimer.postDelayed(this, 30 * 60 * 1000L);
+        }
+    };
+
+    private void emitUpdState() {
+        JSONObject o = new JSONObject();
+        put(o, "text", EclipseUpdate.last(this));
+        emit("updstate", o.toString());
+    }
+
     private void checkUpdate(final boolean asked) {
+        lastUpdateCheck = System.currentTimeMillis();
         new Thread("eclipse-update") {
             @Override
             public void run() {
@@ -1524,6 +1551,7 @@ public class EclipseActivity extends Activity {
                         emit("update", ev.toString());
                     }
                 }, asked);
+                emitUpdState();
             }
         }.start();
     }

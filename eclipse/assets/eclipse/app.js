@@ -146,6 +146,9 @@ const handlers = {
     }
     box.hidden = false;
   },
+  updstate(st) {
+    $("#ver").textContent = "Eclipse " + N.version() + (st && st.text ? " — mises à jour : " + st.text : "");
+  },
   diag(text) {
     $("#diag-text").textContent = text;
   },

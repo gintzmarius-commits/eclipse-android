@@ -55,6 +55,8 @@ type updateState struct {
 	errText   string
 	dlStart   time.Time
 	auto      bool // started by itself when Eclipse opened
+	lastCheck time.Time
+	lastText  string // result of the last automatic check, shown in the Versions tab
 }
 
 // updateSupported: installing versions from the app (Linux, and the
@@ -209,6 +211,7 @@ func (a *Core) versionsView() map[string]any {
 		"error": u.fetchErr, "checked": !u.fetchedAt.IsZero(),
 		"busy": u.busy, "target": u.target, "phase": u.phase, "percent": u.percent,
 		"message": u.message, "detail": u.detail, "installError": u.errText, "auto": u.auto,
+		"lastCheck": lastCheckText(u.lastCheck), "lastText": u.lastText,
 	}
 }
 
@@ -259,6 +262,7 @@ func (a *Core) updateFail(msg string, err error) {
 	if err != nil {
 		u.errText += " (" + err.Error() + ")"
 	}
+	u.lastText = "échec : " + u.errText
 	u.mu.Unlock()
 	log.Printf("update: %s: %v", msg, err)
 }
@@ -379,6 +383,11 @@ func (a *Core) autoUpdate() {
 	a.fetchVersions(true)
 	u := &a.upd
 	u.mu.Lock()
+	u.lastCheck = time.Now()
+	u.lastText = "à jour"
+	if u.fetchErr != "" {
+		u.lastText = "impossible de joindre GitHub (" + u.fetchErr + ")"
+	}
 	newest := ""
 	for _, v := range u.versions {
 		if versionLess(version, v.Version) && (newest == "" || versionLess(newest, v.Version)) {
@@ -388,6 +397,7 @@ func (a *Core) autoUpdate() {
 	busy := u.busy
 	if newest != "" && !busy {
 		u.auto = true
+		u.lastText = "installation d'Eclipse " + newest
 	}
 	u.mu.Unlock()
 	if newest == "" || busy {
@@ -424,4 +434,11 @@ func (a *Core) updateRoutes(api *http.ServeMux) {
 		go a.installVersion(req.Version)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+}
+
+func lastCheckText(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("02/01 15:04")
 }

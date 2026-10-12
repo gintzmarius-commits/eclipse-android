@@ -105,7 +105,15 @@ func hasArg(a string) bool {
 func setupLog() {
 	dir := logDir()
 	_ = os.MkdirAll(dir, 0o755)
-	f, err := os.OpenFile(filepath.Join(dir, "eclipse.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	name := filepath.Join(dir, "eclipse.log")
+	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	if len(os.Args) > 1 && os.Args[1] == "--update" {
+		// the installer of an automatic update: its own file, kept
+		name, flags = filepath.Join(dir, "update.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND
+	} else {
+		_ = os.Rename(name, filepath.Join(dir, "eclipse.prev.log")) // the previous run stays readable
+	}
+	f, err := os.OpenFile(name, flags, 0o644)
 	if err == nil {
 		log.SetOutput(f)
 	}
