@@ -1,4 +1,4 @@
-**Eclipse 2.3.2 pour PC**
+**Eclipse 2.3.3 pour PC**
 
-- **Mises à jour automatiques** (Ubuntu) : à chaque ouverture, Eclipse vérifie s'il existe une nouvelle version et l'installe tout seul, puis redémarre. Ubuntu demande juste ton mot de passe.
-- Si tu refuses, la mise à jour est proposée à la prochaine ouverture.
+- **Mises à jour automatiques aussi sous Windows** : à chaque ouverture, Eclipse vérifie s'il existe une nouvelle version, l'installe tout seul et redémarre (tes réglages et tes appareils sont gardés).
+- Onglet **Versions** sous Windows aussi : toutes les versions, et retour à une ancienne en un clic.
