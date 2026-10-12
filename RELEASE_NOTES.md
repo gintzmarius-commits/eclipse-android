@@ -1,8 +1,7 @@
-**Eclipse pour Android 2.4.0** : un nouvel onglet **Fichiers**.
+**Eclipse pour Android 3.0.0** : un nouveau look, tout en mouvement.
 
-- **Les fichiers de tes PC sur ton téléphone** : parcours tous les disques de ton PC, télécharge un fichier (il arrive dans Téléchargements › Eclipse) ou envoie des fichiers du téléphone dans n'importe quel dossier du PC. Ça marche sur le même Wi-Fi, et partout grâce à Tailscale (même en 4G).
-- **Les fichiers de ton téléphone sur tes PC** : active « Partager les fichiers de ce téléphone » dans l'onglet Fichiers (Android demande une autorisation la première fois). Tes PC voient alors tout le stockage du téléphone, et peuvent y télécharger ou y envoyer des fichiers. Une notification reste affichée tant que c'est activé.
-- Rien n'est jamais écrasé ni supprimé : un fichier envoyé avec un nom déjà pris est enregistré sous « nom (2) ».
-- Seuls les appareils connectés à ton PC (QR code) ont accès aux fichiers.
-
-Il faut **Eclipse 2.4 sur le PC** (il se met à jour tout seul à l'ouverture). Eclipse se met lui aussi à jour tout seul sur ce téléphone.
+- **Animation d'ouverture** : à chaque lancement, le logo d'Eclipse apparaît dans la nuit avec sa couronne dorée, puis l'appli s'ouvre en douceur, comme une fenêtre sur macOS. Touche l'écran pour la passer.
+- **Fond vivant** : les couleurs floues du fond tournent lentement, chacune sur son propre cercle, à sa vitesse et dans son sens.
+- Les listes de fichiers et les fenêtres apparaissent avec de petites animations.
+- **Plus léger** : rien ne bouge ni ne se dessine quand l'appli n'est pas à l'écran (pendant que tu joues, par exemple). Sur les téléphones modestes, le fond reste animé mais l'effet de verre est simplifié. Les grands dossiers s'affichent plus vite.
+- Si tu as demandé à Android de réduire les animations, Eclipse les coupe aussi.

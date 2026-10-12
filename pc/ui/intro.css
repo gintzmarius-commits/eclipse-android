@@ -1,0 +1,65 @@
+/* Eclipse 3 — motion shared by the PC window, the browser page and the phone app:
+   the opening animation, the living background, and what keeps it light. */
+
+/* ---------- opening (pure CSS: it ends by itself even without script) ---------- */
+#intro {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(120% 90% at 50% 42%, #221c3a 0%, #110f1f 45%, #07070d 100%);
+  animation: ec-intro-out .55s cubic-bezier(.4, 0, .2, 1) 1.2s forwards;
+  -webkit-user-select: none; user-select: none; cursor: default;
+}
+#intro .ec-logo { position: relative; width: 112px; height: 112px; animation: ec-logo-in .7s cubic-bezier(.2, .8, .2, 1) .05s both; }
+#intro .ec-logo img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border-radius: 26%;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .06); }
+#intro .ec-corona { position: absolute; top: -45%; left: -45%; right: -45%; bottom: -45%; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 207, 92, .65) 0%, rgba(246, 165, 26, .32) 32%, rgba(246, 120, 26, .08) 52%, transparent 66%);
+  animation: ec-corona 1.25s ease-out .2s both; }
+#intro .ec-name { margin-top: 24px; color: #fff; font: 600 30px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI Variable Display", "Segoe UI", Roboto, Ubuntu, system-ui, sans-serif;
+  letter-spacing: .02em; animation: ec-name-in .7s cubic-bezier(.2, .8, .2, 1) .42s both; }
+#intro .ec-name span { color: #ffc24d; }
+@keyframes ec-logo-in { from { opacity: 0; transform: scale(.7); filter: blur(14px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ec-corona { 0% { opacity: 0; transform: scale(.35); } 45% { opacity: 1; } 100% { opacity: 0; transform: scale(1.7); } }
+@keyframes ec-name-in { from { opacity: 0; transform: translateY(12px); letter-spacing: .32em; } to { opacity: 1; transform: none; letter-spacing: .02em; } }
+@keyframes ec-intro-out { to { opacity: 0; transform: scale(1.14); visibility: hidden; } }
+
+/* The app comes forward while the opening fades away, like a window opening on macOS. */
+body.ec-intro > :not(#intro):not(script) { animation: ec-app-in .7s cubic-bezier(.2, .8, .2, 1) 1.12s backwards; }
+@keyframes ec-app-in { from { opacity: 0; scale: .955; filter: blur(10px); } to { opacity: 1; scale: 1; filter: blur(0); } }
+
+/* ---------- the living background ---------- */
+/* Each coloured light turns slowly on its own circle (random size, speed and
+   direction, set by intro.js), drifting and breathing a little. Only
+   transforms move: the blur itself is computed once. */
+.backdrop i {
+  will-change: transform;
+  animation: ec-orbit var(--ec-d, 34s) linear infinite var(--ec-dir, normal),
+             ec-drift var(--ec-d2, 13s) ease-in-out infinite alternate;
+  animation-delay: var(--ec-delay, 0s), var(--ec-delay2, 0s);
+}
+@keyframes ec-orbit {
+  from { transform: rotate(0deg) translateX(var(--ec-r, 6vmax)) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(var(--ec-r, 6vmax)) rotate(-360deg); }
+}
+@keyframes ec-drift {
+  from { translate: 0 0; scale: 1; }
+  to { translate: var(--ec-wx, 3vmax) var(--ec-wy, -2vmax); scale: var(--ec-s, 1.15); }
+}
+.backdrop i:nth-child(4) { width: 34vmax; height: 34vmax; right: 8vw; bottom: -14vmax; background: #ffc6dd; opacity: .55; }
+html.ec-paused .backdrop i, html.ec-paused #intro, html.ec-paused #intro * { animation-play-state: paused; }
+
+/* Lists appear softly (first rows only). */
+.ec-in { animation: ec-row-in .32s cubic-bezier(.2, .8, .2, 1) backwards; }
+@keyframes ec-row-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* ---------- lighter on modest phones ---------- */
+/* The background is already blurred: the glass keeps its look without
+   blurring it a second time behind every card. */
+html.ec-lite *:not(.top):not(.btabs) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+html.ec-lite .panel { background: rgba(255, 255, 255, .6); }
+
+@media (prefers-reduced-motion: reduce) {
+  #intro { display: none; }
+  body.ec-intro > * { animation: none !important; }
+  .backdrop i, .ec-in { animation: none !important; }
+}

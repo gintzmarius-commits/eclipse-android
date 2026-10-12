@@ -6,8 +6,11 @@
 <title>Eclipse</title>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="files.css">
+<link rel="stylesheet" href="intro.css">
 </head>
-<body>
+<body class="ec-intro">
+<div id="intro" aria-hidden="true"><div class="ec-logo"><i class="ec-corona"></i><img src="logo.png" alt=""></div><div class="ec-name">Eclipse</div></div>
+
 <div class="backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -372,6 +375,7 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
+<script src="intro.js"></script>
 <script src="files.js"></script>
 <script src="app.js"></script>
 </body>

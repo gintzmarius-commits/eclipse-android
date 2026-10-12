@@ -54,6 +54,7 @@
 /* list */
 .fx-msg { padding: 14px 16px; border-radius: 16px; background: rgba(196, 43, 28, .08); color: var(--err, #c42b1c); font-size: 14px; }
 .fx-msg.soft { background: rgba(255, 255, 255, .4); color: var(--muted, #5f6470); text-align: center; }
+.fx-row { content-visibility: auto; contain-intrinsic-size: auto 56px; }
 .fx-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .fx-row { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 12px; border-radius: 16px; cursor: pointer;
   background: rgba(255, 255, 255, .42); border: 1px solid rgba(255, 255, 255, .6); min-height: 54px; }
@@ -85,6 +86,11 @@
 .fx-drop svg { width: 34px; height: 34px; }
 
 /* file sheet */
+.fx-sheet { animation: fx-fade .18s ease-out; }
+.fx-sheet .fx-card { animation: fx-pop .26s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes fx-fade { from { opacity: 0; } }
+@keyframes fx-pop { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+.fx-tr { animation: fx-pop .25s cubic-bezier(.2, .9, .3, 1.2); }
 .fx-sheet { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50; background: rgba(20, 18, 40, .28); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .fx-card { width: 100%; max-width: 440px; padding: 20px; border-radius: 26px; background: var(--glass-strong, rgba(255, 255, 255, .9));
   -webkit-backdrop-filter: var(--blur, blur(24px)); backdrop-filter: var(--blur, blur(24px)); box-shadow: var(--shadow-pop, 0 20px 60px rgba(0, 0, 0, .2));

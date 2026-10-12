@@ -52,7 +52,12 @@ let updateShown = false;
 let currentTab = "home";
 let powerBusy = false;
 
+let pollTimer = null;
+let pollBusy = false;
 async function poll() {
+  if (pollBusy) return;
+  pollBusy = true;
+  clearTimeout(pollTimer);
   try {
     state = await api("GET", "/api/state");
     render();
@@ -60,7 +65,9 @@ async function poll() {
     /* backend restarting */
   }
   const fast = (state.phase !== "ready" && !(state.install && state.install.mode)) || state.starting || powerBusy;
-  setTimeout(poll, fast ? 400 : 3000);
+  // Window hidden or minimized: no need to ask as often.
+  pollBusy = false;
+  pollTimer = setTimeout(poll, fast ? 400 : document.hidden ? 10000 : 3000);
 }
 
 function render() {
@@ -1133,6 +1140,7 @@ document.addEventListener("contextmenu", (e) => {
   if (!e.target.closest("input, code, #ip-line, .help")) e.preventDefault();
 });
 poll();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 
 
 // =====================================================================

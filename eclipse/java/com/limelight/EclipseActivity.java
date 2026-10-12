@@ -277,6 +277,7 @@ public class EclipseActivity extends Activity {
         super.onResume();
         if (web != null) {
             setupWindow();
+            web.onResume();
         }
         UiHelper.showDecoderCrashDialog(this);
         inForeground = true;
@@ -296,6 +297,8 @@ public class EclipseActivity extends Activity {
     protected void onPause() {
         super.onPause();
         inForeground = false;
+        // Off screen (or while a game streams): the page stops drawing.
+        if (web != null) web.onPause();
         stopUpdates(false);
     }
 

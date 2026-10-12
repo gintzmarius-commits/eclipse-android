@@ -317,7 +317,9 @@
       self.message("");
       if (self.path === null) { self.roots = data.roots || []; self.data = null; }
       else self.data = data;
+      self.animate = !quiet;
       self.render();
+      self.animate = false;
     }, function (e) {
       if (my !== self.seq) return;
       self.$list.innerHTML = "";
@@ -380,6 +382,7 @@
         li.querySelector("b").textContent = r.name;
         li.querySelector("span").textContent = r.path;
         li.onclick = function () { self.open(r.path); };
+        self.appear(li, self.$list.children.length);
         self.$list.appendChild(li);
       });
       return;
@@ -399,7 +402,7 @@
       this.message(this.filter ? "Aucun fichier ne correspond." : "Ce dossier est vide.", true);
     }
     var frag = document.createDocumentFragment(), max = 1500;
-    shown.slice(0, max).forEach(function (e) {
+    shown.slice(0, max).forEach(function (e, i) {
       var k = e.dir ? "folder" : kindOf(e.name);
       var li = el('<li class="fx-row">' + icon(k, "fx-ico k-" + k) +
         '<div class="fx-name"><b></b><span></span></div>' +
@@ -412,12 +415,20 @@
         li.onclick = function () { self.fileSheet(e, full); };
         li.querySelector(".fx-dl").onclick = function (ev) { ev.stopPropagation(); self.a.download(self.dev, full, e, self.ui()); };
       }
+      self.appear(li, i);
       frag.appendChild(li);
     });
     this.$list.appendChild(frag);
     if (shown.length > max || (this.data && this.data.more)) {
       this.$list.appendChild(el('<li class="fx-more">Ce dossier contient beaucoup de fichiers : utilise la recherche pour trouver le bon.</li>'));
     }
+  };
+
+  // The first rows of a folder just opened slide in, one after the other.
+  Browser.prototype.appear = function (li, i) {
+    if (!this.animate || i > 14) return;
+    li.className += " ec-in";
+    li.style.animationDelay = i * 18 + "ms";
   };
 
   Browser.prototype.fileSheet = function (e, full) {

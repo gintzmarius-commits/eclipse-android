@@ -138,7 +138,7 @@ for src_dir, dst_dir in (("eclipse/res", res),
             print(f"  copied {dst.relative_to(up)}")
 
 # 4a) The file browser is the same on the phone and on the PC (pc/ui).
-for name in ("files.js", "files.css"):
+for name in ("files.js", "files.css", "intro.js", "intro.css"):
     dst = app / "src/main/assets/eclipse" / name
     shutil.copyfile(ROOT / "pc/ui" / name, dst)
     print(f"  copied {dst.relative_to(up)}")

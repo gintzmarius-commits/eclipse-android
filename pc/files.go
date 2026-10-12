@@ -953,7 +953,7 @@ func (s *fileServer) handler() http.Handler {
 		http.Redirect(w, r, "/web/", http.StatusFound)
 	})
 	mux.HandleFunc("GET /web/", page)
-	for _, f := range []string{"/files.js", "/files.css", "/logo.png", "/app.css"} {
+	for _, f := range []string{"/files.js", "/files.css", "/logo.png", "/app.css", "/intro.js", "/intro.css"} {
 		mux.HandleFunc("GET "+f, page)
 	}
 	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {

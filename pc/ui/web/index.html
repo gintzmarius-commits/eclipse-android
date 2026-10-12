@@ -8,6 +8,7 @@
 <link rel="icon" href="/logo.png">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/files.css">
+<link rel="stylesheet" href="/intro.css">
 <style>
   html, body { height: auto; min-height: 100%; }
   body { overflow: auto; user-select: auto; padding: 0 16px 120px; }
@@ -25,7 +26,9 @@
   .wout { height: 34px; padding: 0 14px; font-size: 13px; }
 </style>
 </head>
-<body>
+<body class="ec-intro">
+<div id="intro" aria-hidden="true"><div class="ec-logo"><i class="ec-corona"></i><img src="/logo.png" alt=""></div><div class="ec-name">Eclipse</div></div>
+
 <div class="backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
 
 <header class="wtop">
@@ -51,6 +54,7 @@
 </main>
 
 <div class="toast" id="toast" hidden></div>
+<script src="/intro.js"></script>
 <script src="/files.js"></script>
 <script>
 "use strict";

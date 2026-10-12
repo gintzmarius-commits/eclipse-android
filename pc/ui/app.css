@@ -410,3 +410,8 @@ input[type="text"]:focus { box-shadow: 0 0 0 3px rgba(246, 165, 26, .3); border-
 #pane-files h3 { margin: 18px 0 0; }
 #pane-files .files-card .remote-head .txt span { max-width: 420px; }
 #fw-err:empty { display: none; }
+
+/* Eclipse 3: tabs slide in softly */
+.pane:not([hidden]) { animation: ec-pane-in .32s cubic-bezier(.2, .8, .2, 1); }
+@keyframes ec-pane-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .pane { animation: none !important; } }
