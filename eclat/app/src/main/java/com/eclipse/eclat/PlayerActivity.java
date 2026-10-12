@@ -85,8 +85,6 @@ public class PlayerActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 28) {
             w.getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
-        immersive(true);
-
         takeViewIntent(getIntent());
 
         ArrayList<String> opts = new ArrayList<>();
@@ -142,6 +140,7 @@ public class PlayerActivity extends Activity {
         });
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
+        immersive(true); // needs the window's views (setContentView) first
 
         // TextureView: the glass controls draw over the video like any view.
         player.attachViews(videoLayout, null, true, true);

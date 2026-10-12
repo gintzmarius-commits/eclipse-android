@@ -6,7 +6,12 @@ import sys
 import xml.etree.ElementTree as ET
 
 path, want = sys.argv[1], sys.argv[2].casefold()
-for n in ET.parse(path).iter("node"):
+# optional "exact": an element showing exactly that text wins over one
+# where it is only part of a sentence
+nodes = list(ET.parse(path).iter("node"))
+if len(sys.argv) > 3 and sys.argv[3] == "exact":
+    nodes.sort(key=lambda n: 0 if want in ((n.get("text") or "").strip().casefold(), (n.get("content-desc") or "").strip().casefold()) else 1)
+for n in nodes:
     label = (n.get("text") or "") + " " + (n.get("content-desc") or "")
     if want in label.casefold():
         m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.get("bounds") or "")

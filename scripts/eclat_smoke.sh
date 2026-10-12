@@ -21,7 +21,12 @@ FAIL=""
 
 note() { echo "$*" | tee -a "$RES"; }
 fail() { FAIL="$FAIL; $*"; note "FAIL $*"; }
-pid_of() { adb shell pidof "$1" 2>/dev/null | tr -d '\r'; }
+pid_of() { # asks twice: adb can hiccup
+  local p
+  p=$(adb shell pidof "$1" 2>/dev/null | tr -d '\r')
+  [ -z "$p" ] && { sleep 1; p=$(adb shell pidof "$1" 2>/dev/null | tr -d '\r'); }
+  echo "$p"
+}
 dump() { adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/$1.xml" > /dev/null 2>&1; }
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null; dump "$1"; }
 wait_text() { # <text> <seconds>
@@ -36,7 +41,7 @@ wait_text() { # <text> <seconds>
 tap() {
   local xy
   dump tap
-  xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1") || { note "  (pas trouvé à l'écran : $1)"; return 1; }
+  xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1" exact) || { note "  (pas trouvé à l'écran : $1)"; return 1; }
   adb shell input tap $xy
   note "  tap « $1 »"
 }
