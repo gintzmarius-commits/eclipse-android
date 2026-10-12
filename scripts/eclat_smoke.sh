@@ -111,9 +111,20 @@ sleep 3
 shot 1-photos
 [ -n "$(pid_of $PKG)" ] && note "OK Éclat ouvert" || fail "Éclat s'est fermé au lancement"
 tap "Vidéos" && sleep 3 && shot 2-videos
-[ -n "$(pid_of $PKG)" ] || { fail "Éclat s'est fermé sur l'onglet Vidéos"
-  note "  système : $(adb logcat -d 2>/dev/null | grep -iE "Fatal signal|renderer gone|Render process|lowmemorykiller|Killing [0-9]+:$PKG|Process $PKG .*(died|has died)|$PKG.*(crash|signal)|Abort message|backtrace" | tail -12 | cut -c1-230 | tr '\n' '|')"
-  adb shell am start -W -n $PKG/.MainActivity > /dev/null 2>&1; sleep 4; }
+if [ -z "$(pid_of $PKG)" ]; then
+  SYS=$(adb logcat -d 2>/dev/null | grep -iE "Fatal signal|renderer gone|Render process|Killing [0-9]+:$PKG|Process $PKG .*(died|has died)|Abort message" | tail -8 | cut -c1-230)
+  adb shell am start -W -n $PKG/.MainActivity > /dev/null 2>&1; sleep 5
+  if echo "$SYS" | grep -q "in dying proc com.google.android.gms"; then
+    # Android closes every app using Google Play services' font service
+    # when Play services restarts (common on a freshly started emulator).
+    note "  (Éclat fermé par Android : les services Google Play ont redémarré ; on relance)"
+    tap "Vidéos" && sleep 3 && shot 2-videos
+    [ -n "$(pid_of $PKG)" ] || fail "Éclat s'est fermé sur l'onglet Vidéos (deux fois)"
+  else
+    fail "Éclat s'est fermé sur l'onglet Vidéos"
+    note "  système : $(echo "$SYS" | tr '\n' '|')"
+  fi
+fi
 tap "Musique" && sleep 2 && shot 3-music
 tap "Fichiers" && sleep 2 && shot 4-files
 if wait_text "Download" 8 || wait_text "DCIM" 4; then note "OK dossiers affichés"; else
