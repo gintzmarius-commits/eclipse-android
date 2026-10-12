@@ -167,7 +167,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 4096
           script: FAKE_PC=/tmp/fakepc FAKE_PC_LOG=/tmp/fakepc.log PC_URL_FILE=/tmp/eclipse-pc.out PC_DOWNLOADS=/tmp/pcdl bash scripts/smoke_test.sh apk/Eclipse-emulator.apk out
       - name: Results
         if: always()

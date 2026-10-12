@@ -473,7 +473,8 @@ public class EclipseShare extends Service {
         }
         synchronized (EclipseShare.class) {
             String finalName = part.getName().substring(0, part.getName().length() - ".eclipse-part".length());
-            File dest = freeFile(dir, finalName);
+            File dest = new File(dir, finalName); // its ".eclipse-part" is this file
+            if (dest.exists()) dest = freeFile(dir, finalName);
             if (!part.renameTo(dest)) {
                 //noinspection ResultOfMethodCallIgnored
                 part.delete();

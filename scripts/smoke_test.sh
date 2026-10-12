@@ -45,9 +45,15 @@ shot() {
 }
 # tap <text>: taps the first thing on screen showing that text
 tap() {
-  dump tap
-  local xy
-  xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1") || { note "  (pas trouvé à l'écran : $1)"; return 1; }
+  local xy i
+  # The page's accessibility tree can lag behind the screen: look a few times.
+  for i in 1 2 3 4 5 6; do
+    dump tap
+    xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1") && break
+    xy=""
+    sleep 1
+  done
+  [ -n "$xy" ] || { note "  (pas trouvé à l'écran : $1)"; return 1; }
   adb shell input tap $xy
   note "  tap « $1 »"
 }
@@ -150,6 +156,9 @@ if ! grep -q Success "$OUT/install.txt"; then
   fail "installation : $(tail -1 "$OUT/install.txt")"
   echo "SMOKE FAIL: ${FAIL#; }" >> "$RES"; exit 1
 fi
+# Compiled ahead of time like a store install does (a cold, uncompiled first
+# launch on a busy software-rendered emulator is far slower than on a phone).
+adb shell cmd package compile -m speed-profile -f $PKG > /dev/null 2>&1 || true
 CPU=$(adb shell dumpsys package $PKG | grep -m1 -o 'primaryCpuAbi=[^ ]*' | tr -d '\r' | cut -d= -f2)
 TUNNEL=0
 unzip -l "$APK" "lib/$CPU/libgojni.so" > /dev/null 2>&1 && TUNNEL=1
