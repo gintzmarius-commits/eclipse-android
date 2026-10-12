@@ -29,10 +29,23 @@ pid_of() { # asks twice: adb can hiccup
 }
 dump() { adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/$1.xml" > /dev/null 2>&1; }
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null; dump "$1"; }
+# A busy emulator shows "X isn't responding" for system apps: answer Wait.
+clear_anr() {
+  local f=$1 xy
+  grep -qE "isn.t responding|ne répond pas" "$f" 2>/dev/null || return 1
+  xy=$(python3 "$HERE/ui_find.py" "$f" "Wait" exact) || xy=$(python3 "$HERE/ui_find.py" "$f" "Attendre" exact) || return 1
+  adb shell input tap $xy
+  note "  (fenêtre « ne répond pas » du système fermée)"
+  sleep 2
+  adb shell am start -n $PKG/.MainActivity > /dev/null 2>&1
+  sleep 2
+  return 0
+}
 wait_text() { # <text> <seconds>
   local end=$((SECONDS + $2))
   while [ $SECONDS -lt $end ]; do
     dump wait
+    clear_anr "$OUT/wait.xml" && continue
     python3 "$HERE/ui_find.py" "$OUT/wait.xml" "$1" > /dev/null 2>&1 && return 0
     sleep 1
   done
@@ -41,6 +54,7 @@ wait_text() { # <text> <seconds>
 tap() {
   local xy
   dump tap
+  clear_anr "$OUT/tap.xml" && { sleep 2; dump tap; }
   xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1" exact) || { note "  (pas trouvé à l'écran : $1)"; return 1; }
   adb shell input tap $xy
   note "  tap « $1 »"
