@@ -7,8 +7,10 @@ OUT=$(realpath -m "$1")
 mkdir -p "$OUT"
 cd "$(dirname "$0")/../tunnel"
 go version
-go get tailscale.com@"$(cat TAILSCALE_VERSION)" golang.org/x/mobile/bind@latest
-go mod tidy
+# The Go module servers sometimes cut a download: try again (3 times).
+retry() { for i in 1 2 3; do "$@" && return 0; echo "retry ($i): $*"; sleep 20; done; return 1; }
+retry go get tailscale.com@"$(cat TAILSCALE_VERSION)" golang.org/x/mobile/bind@latest
+retry go mod tidy
 LOG="${GITHUB_WORKSPACE:-/tmp}/tunnel-test.log"
 : > "$LOG"
 # On failure, the essential lines become an annotation (see the run page)
