@@ -51,6 +51,8 @@ tap() {
     dump tap
     xy=$(python3 "$HERE/ui_find.py" "$OUT/tap.xml" "$1") && break
     xy=""
+    # a tiny scroll makes the page send its accessibility tree again
+    [ $i = 3 ] && adb shell input swipe 540 1400 540 1380 150 > /dev/null 2>&1
     sleep 1
   done
   [ -n "$xy" ] || { note "  (pas trouvé à l'écran : $1)"; return 1; }
@@ -63,6 +65,7 @@ wait_text() {
   while [ $SECONDS -lt $end ]; do
     dump wait
     python3 "$HERE/ui_find.py" "$OUT/wait.xml" "$1" > /dev/null && return 0
+    n=$((${n:-0} + 1)); [ $((n % 5)) = 0 ] && adb shell input swipe 540 1400 540 1380 150 > /dev/null 2>&1
     sleep 1
   done
   return 1
@@ -337,7 +340,8 @@ if [ $TUNNEL = 1 ] && [ "${PAIRED:-0}" = 1 ] && [ -n "${PC_URL_FILE:-}" ] && [ -
     shot 14-files-roots
     if tap "=Documents" && wait_text "rapport-eclipse.txt" 40; then
       note "OK dossier du PC ouvert"
-      tap "rapport-eclipse.txt" && wait_text "=Télécharger" 10 && tap "=Télécharger"
+      # the download button of the file's row
+      tap "=Télécharger"
       ok=0
       for i in $(seq 1 40); do
         sleep 1
