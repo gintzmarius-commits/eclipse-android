@@ -319,6 +319,7 @@ if [ $ok = 1 ]; then note "OK l'appli s'est mise à jour ($AFTER)"
 else fail "l'appli ne s'est pas mise à jour ($BEFORE)"; fi
 kill $HTTPD 2>/dev/null
 adb shell "rm -f /data/data/$PKG/files/test-update-url"
+sleep 15   # Android finishes the update (it may restart the app once)
 launch
 wait_alive 10 "après la mise à jour" && shot 13-after-update
 tail -n +"$((P4_FROM + 1))" "$OUT/logcat.txt" > "$OUT/logcat-part4.txt"
