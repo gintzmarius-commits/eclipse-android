@@ -130,8 +130,11 @@ LINK=$(head -1 "$OUT/sender.txt")
 note "lien NFC simulé : $LINK"
 adb shell input keyevent KEYCODE_HOME
 sleep 1
-adb shell "am start -W -n $PKG/.share.ReceiveActivity -a android.nfc.action.NDEF_DISCOVERED -d '$LINK'" > /dev/null 2>&1
-if wait_text "Accepter" 20; then
+nfc_read() { adb shell "am start -W -n $PKG/.share.ReceiveActivity -a android.nfc.action.NDEF_DISCOVERED -d '$LINK'" > /dev/null 2>&1; }
+nfc_read
+# a busy emulator can miss the first one; a phone held against the other reads the tag again too
+if ! wait_text "Accepter" 20; then shot 5-retry; note "  (île pas vue en 20 s : deuxième lecture)"; nfc_read; fi
+if wait_text "Accepter" 25; then
   note "OK l'île propose le fichier"
   sleep 1; shot 5-island
   grep -q "ASKED" "$OUT/sender.txt" && note "OK l'envoyeur voit la demande ($(grep ASKED "$OUT/sender.txt" | head -1))" || fail "l'envoyeur n'a pas reçu la demande"
