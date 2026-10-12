@@ -1,8 +1,7 @@
-**Eclipse PC 2.4.0** : un nouvel onglet **Fichiers**.
+**Eclipse PC 3.0.0** : un nouveau look, tout en mouvement.
 
-- **Les fichiers de tes téléphones sur ce PC** : quand le partage est activé sur le téléphone (appli Eclipse 2.4, onglet Fichiers), tu parcours tout son stockage depuis ce PC, tu télécharges ses photos et fichiers (ils arrivent dans Téléchargements › Eclipse) et tu lui envoies des fichiers.
-- **Les fichiers de ce PC sur tes téléphones** : depuis l'appli Eclipse 2.4, tes téléphones connectés parcourent tous les disques de ce PC, téléchargent et envoient des fichiers. Sur le même Wi-Fi, ou partout avec Tailscale.
-- **Depuis un navigateur** : l'onglet Fichiers affiche une adresse et un code d'accès ; n'importe quel navigateur ouvre alors les fichiers de ce PC et de tes téléphones (désactivable).
-- Rien n'est jamais écrasé ni supprimé ; seuls tes appareils connectés (QR code) ou un navigateur avec le code ont accès, et seulement depuis la maison ou Tailscale.
-- **Toujours disponible** : Eclipse reste ouvert en arrière-plan quand tu fermes sa fenêtre et démarre avec l'ordinateur (désactivable dans l'onglet Fichiers). Rouvrir Eclipse rouvre simplement sa fenêtre.
-- Les mises à jour sont vérifiées à chaque ouverture, et deux fois par jour en arrière-plan.
+- **Animation d'ouverture** : à chaque ouverture, le logo d'Eclipse apparaît dans la nuit avec sa couronne dorée, puis la fenêtre s'ouvre en douceur, comme sur macOS (un clic la passe).
+- **Fond vivant** : les couleurs floues du fond tournent lentement, chacune sur son propre cercle, à sa vitesse et dans son sens.
+- Les onglets, les fichiers et les fenêtres apparaissent avec de petites animations ; la page navigateur du partage de fichiers en profite aussi.
+- **Plus léger** : rien ne bouge quand la fenêtre n'est pas visible, Eclipse interroge moins souvent quand elle est réduite, et les grands dossiers s'affichent plus vite.
+- Si Windows ou Ubuntu est réglé pour réduire les animations, Eclipse les coupe aussi.
