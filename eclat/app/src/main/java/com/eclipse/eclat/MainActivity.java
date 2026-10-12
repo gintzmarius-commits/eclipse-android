@@ -109,6 +109,14 @@ public class MainActivity extends Activity implements SendService.Watcher {
             }
 
             @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                // The page's engine stopped (memory): start again rather than close.
+                android.util.Log.w("Eclat", "WebView renderer gone, crash=" + detail.didCrash());
+                recreate();
+                return true;
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
                 pushInsets();

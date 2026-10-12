@@ -31,7 +31,7 @@ window.eclat = {
 // ------------------------------------------------------------------
 // Small helpers
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const enc = encodeURIComponent;
 
 function fmtSize(n) {
@@ -145,7 +145,7 @@ function load(tab) {
 }
 
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
-  if (S.tab === b.dataset.tab) { $('content').scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (S.tab === b.dataset.tab) { $('content').scrollTop = 0; return; }
   showTab(b.dataset.tab);
 }));
 
@@ -414,7 +414,7 @@ async function showInfo(it) {
   const d = (await call('details', { uri: it.uri })) || {};
   const rows = [
     ['Type', it.mime],
-    ['Taille', fmtSize(d.size ?? it.size)],
+    ['Taille', fmtSize(d.size != null ? d.size : it.size)],
     ['Date', fmtDate(it.date || d.date)],
     ['Dimensions', d.res || (it.w ? it.w + ' × ' + it.h : '')],
     ['Durée', fmtDur(it.duration)],

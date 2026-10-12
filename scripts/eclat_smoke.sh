@@ -91,7 +91,8 @@ if wait_text "Photos" 25; then note "OK écran Photos"; else fail "l'écran Phot
 sleep 3
 shot 1-photos
 [ -n "$(pid_of $PKG)" ] && note "OK Éclat ouvert" || fail "Éclat s'est fermé au lancement"
-tap "Vidéos" && sleep 2 && shot 2-videos
+tap "Vidéos" && sleep 3 && shot 2-videos
+[ -n "$(pid_of $PKG)" ] || { fail "Éclat s'est fermé sur l'onglet Vidéos"; adb shell am start -W -n $PKG/.MainActivity > /dev/null 2>&1; sleep 4; }
 tap "Musique" && sleep 2 && shot 3-music
 tap "Fichiers" && sleep 2 && shot 4-files
 if wait_text "Download" 8 || wait_text "DCIM" 4; then note "OK dossiers affichés"; else
@@ -144,8 +145,14 @@ if [ -s "$OUT/test.mp4" ]; then
 fi
 
 adb logcat -d > "$OUT/logcat.txt" 2>&1
+adb logcat -d -b crash > "$OUT/crash-buffer.txt" 2>&1
 C=$(crashes)
-if [ -n "$C" ]; then echo "$C" > "$OUT/crash.txt"; fail "plantage : $(echo "$C" | grep -m1 -E 'Exception|signal' | cut -c1-200)"; fi
+if [ -n "$C" ] || grep -q "$PKG" "$OUT/crash-buffer.txt"; then
+  echo "$C" > "$OUT/crash.txt"
+  fail "plantage"
+  note "  journal des plantages : $(grep -A25 "$PKG" "$OUT/crash-buffer.txt" | head -40 | cut -c1-220 | tr '\n' '|')"
+  note "  logcat : $(grep -E -A6 "FATAL EXCEPTION|Fatal signal|renderer|Render process|ANR in" "$OUT/logcat.txt" | head -30 | cut -c1-220 | tr '\n' '|')"
+fi
 
 if [ -z "$FAIL" ]; then echo "SMOKE OK" >> "$RES"; exit 0; fi
 echo "SMOKE FAIL: ${FAIL#; }" >> "$RES"

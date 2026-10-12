@@ -32,6 +32,11 @@ jobs:
           mkdir -p /tmp/t
           scripts/ci_run.sh "Tests Éclat" bash -c "javac -encoding UTF-8 -d /tmp/t eclat/app/src/main/java/com/eclipse/eclat/share/{ShareLink,Ndef,Type4Tag,ShareServer,Fetch}.java eclat/tests/*.java && java -Dstdout.encoding=UTF-8 -cp /tmp/t ShareTest"
 
+      - name: Pages run on Android 8's WebView (ES2017)
+        run: |
+          (cd /tmp && npm install --silent --no-save acorn@8 > /dev/null)
+          ACORN=/tmp/node_modules/acorn node eclat/tests/check_js.js eclat/app/src/main/assets/ui/{app.js,player.html,island.html}
+
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
