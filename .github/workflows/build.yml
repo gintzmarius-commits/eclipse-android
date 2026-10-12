@@ -4,6 +4,8 @@ on:
   push:
     # main publishes the APK; dev/... branches make a private test build
     branches: [main, "dev/**"]
+    # Éclat (eclat/) has its own workflow
+    paths-ignore: ["eclat/**", ".github/workflows/eclat.yml", "scripts/eclat_smoke.sh"]
   workflow_dispatch:
 
 permissions:

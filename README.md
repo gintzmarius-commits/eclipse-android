@@ -23,6 +23,14 @@ C'est tout : le PC accepte le téléphone tout seul. Sans QR code (Eclipse 1.x
 sur le PC, ou Sunshine seul), touche **Connecter** sur la carte du PC et tape
 sur le PC le code à 4 chiffres affiché par le téléphone.
 
+## Éclat : lecteur et fichiers (avec envoi par NFC)
+
+Ce dépôt contient aussi **Éclat**, un lecteur de photos, vidéos et musique et
+un gestionnaire de fichiers, avec la même interface Liquid Glass et le moteur
+de VLC. Il envoie un fichier à un autre téléphone **par NFC, comme AirDrop**.
+Voir [`eclat/README.md`](eclat/README.md). Son APK est publié dans les
+Releases sous le nom **Eclat.apk** (versions `eclat-v…`).
+
 ## Comment c'est fabriqué
 
 Eclipse est basé sur [Moonlight Android](https://github.com/moonlight-stream/moonlight-android).

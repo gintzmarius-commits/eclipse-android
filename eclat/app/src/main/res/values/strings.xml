@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Éclat</string>
+    <string name="nfc_service">Éclat : envoi de fichiers par NFC</string>
+    <string name="channel_send">Envois et réceptions en cours</string>
+    <string name="channel_receive">Fichiers reçus</string>
+    <string name="channel_playback">Lecture de musique</string>
+    <string name="send_ready_title">Prêt à envoyer par NFC</string>
+    <string name="send_ready_text">%1$s : approche un autre téléphone, dos contre dos.</string>
+    <string name="send_asked_title">%1$s a reçu ta demande</string>
+    <string name="send_error_server">Impossible de préparer l\'envoi.</string>
+    <string name="send_error_network">Pas de Wi-Fi : connecte-toi à un Wi-Fi (le même que l\'autre téléphone).</string>
+    <string name="receive_progress_title">Réception de %1$s</string>
+    <string name="receive_done_title">Fichier reçu</string>
+    <string name="receive_error_unreachable">Impossible de joindre %1$s. Mettez les deux téléphones sur le même Wi-Fi, puis recommencez.</string>
+    <string name="receive_error_storage">Impossible d\'enregistrer le fichier sur ce téléphone.</string>
+    <string name="receive_error_broken">Le transfert s\'est interrompu.</string>
+    <string name="the_other_phone">l\'autre téléphone</string>
+    <string name="cancel">Annuler</string>
+    <string name="open_with">Ouvrir avec</string>
+    <string name="share">Partager</string>
+    <string name="send_nfc">Envoyer par NFC (Éclat)</string>
+    <string name="player_error">Impossible de lire ce fichier.</string>
+    <string name="play">Lecture</string>
+    <string name="pause">Pause</string>
+    <string name="next">Suivant</string>
+    <string name="previous">Précédent</string>
+</resources>

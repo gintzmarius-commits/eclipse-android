@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Lecteur</title>
+<style>
+  :root { --font: "Inter", "Roboto Flex", Roboto, system-ui, sans-serif; --accent: #f6a51a; --accent-hi: #ffc24d; --accent-ink: #2a1800;
+    --st: 0px; --sb: 0px; --sl: 0px; --sr: 0px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font: 15px/1.35 var(--font); color: #fff;
+    user-select: none; -webkit-user-select: none; -webkit-font-smoothing: antialiased; }
+  svg { width: 24px; height: 24px; flex: none; }
+  [hidden] { display: none !important; }
+  .glass { background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .24);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 10px 30px rgba(0, 0, 0, .25);
+    -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%); }
+
+  #touch { position: absolute; inset: 0; touch-action: none; }
+  .ui { position: absolute; inset: 0; pointer-events: none; transition: opacity .25s; }
+  .ui > * { pointer-events: auto; }
+  body.hide .ui { opacity: 0; }
+  body.hide .ui > * { pointer-events: none; }
+  .shade-top, .shade-bot { position: absolute; left: 0; right: 0; height: 150px; pointer-events: none !important; }
+  .shade-top { top: 0; background: linear-gradient(180deg, rgba(0, 0, 0, .55), transparent); }
+  .shade-bot { bottom: 0; height: 200px; background: linear-gradient(0deg, rgba(0, 0, 0, .6), transparent); }
+
+  .top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px;
+    padding: calc(var(--st) + 12px) calc(var(--sr) + 14px) 0 calc(var(--sl) + 14px); }
+  .ib { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; border: 0; padding: 0; color: #fff; }
+  .ib:active { transform: scale(.94); }
+  .ib svg { width: 22px; height: 22px; }
+  .ib.nfc { background: linear-gradient(180deg, var(--accent-hi), var(--accent)); color: var(--accent-ink); border-color: rgba(255, 255, 255, .5); }
+  .title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .title strong { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
+  .title span { font-size: 12.5px; color: rgba(255, 255, 255, .7); }
+
+  .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 28px; }
+  .cb { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; border: 0; color: #fff; padding: 0; }
+  .cb.big { width: 80px; height: 80px; }
+  .cb.big svg { width: 38px; height: 38px; }
+  .cb:active { transform: scale(.93); }
+  .cb:disabled { opacity: .35; }
+
+  .bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 calc(var(--sr) + 16px) calc(var(--sb) + 14px) calc(var(--sl) + 16px); display: grid; gap: 8px; }
+  .seek { display: flex; align-items: center; gap: 12px; font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .bar { position: relative; flex: 1; height: 34px; touch-action: none; display: flex; align-items: center; }
+  .track { position: relative; width: 100%; height: 6px; border-radius: 99px; background: rgba(255, 255, 255, .25); overflow: visible; transition: height .15s; }
+  .bar.drag .track { height: 10px; }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: linear-gradient(90deg, var(--accent-hi), var(--accent)); }
+  .knob { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+  .tools { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 4px; border-radius: 999px; }
+  .tools button { flex: 1; height: 40px; border: 0; border-radius: 999px; background: transparent; color: #fff; font: inherit; font-size: 12.5px; font-weight: 650;
+    display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .tools button:active { background: rgba(255, 255, 255, .18); }
+  .tools svg { width: 20px; height: 20px; }
+
+  /* gestures feedback */
+  .hud { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); padding: 10px 18px; border-radius: 999px; font-weight: 700; font-size: 16px;
+    display: flex; align-items: center; gap: 10px; pointer-events: none; }
+  .hud .meter { width: 120px; height: 6px; border-radius: 99px; background: rgba(255, 255, 255, .25); overflow: hidden; }
+  .hud .meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-hi), var(--accent)); }
+  .ripple { position: absolute; top: 0; bottom: 0; width: 42%; display: grid; place-items: center; pointer-events: none; font-weight: 700;
+    background: radial-gradient(circle at var(--x, 50%) 50%, rgba(255, 255, 255, .18), transparent 60%); animation: rip .6s ease-out forwards; }
+  .ripple.l { left: 0; border-radius: 0 50% 50% 0; } .ripple.r { right: 0; border-radius: 50% 0 0 50%; }
+  @keyframes rip { from { opacity: 1; } to { opacity: 0; } }
+
+  .lock-only { position: absolute; left: calc(var(--sl) + 18px); bottom: calc(var(--sb) + 24px); }
+  .toast { position: absolute; left: 50%; bottom: calc(var(--sb) + 140px); transform: translateX(-50%); padding: 10px 16px; border-radius: 999px; font-weight: 650;
+    display: flex; gap: 10px; align-items: center; white-space: nowrap; animation: up .25s; }
+  .toast button { border: 0; background: rgba(255, 255, 255, .2); color: #fff; font: inherit; font-weight: 700; padding: 6px 12px; border-radius: 99px; }
+  @keyframes up { from { transform: translate(-50%, 12px); opacity: 0; } }
+
+  /* audio: the album cover, the colors behind it */
+  .audio { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    padding: calc(var(--st) + 76px) 28px calc(var(--sb) + 230px); background: #14121f; overflow: hidden; }
+  .audio .bg { position: absolute; inset: -20%; background-size: cover; background-position: center; filter: blur(60px) saturate(160%); opacity: .75; transform: scale(1.1); }
+  .audio .bg.none { background: radial-gradient(circle at 30% 20%, #ffb347 0, transparent 50%), radial-gradient(circle at 80% 70%, #7a5cff 0, transparent 55%), #1b1830; }
+  .cover { position: relative; width: min(74vw, 40vh, 360px); aspect-ratio: 1; border-radius: 28px; overflow: hidden; display: grid; place-items: center;
+    background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .25); box-shadow: 0 30px 70px rgba(0, 0, 0, .45); color: rgba(255, 255, 255, .7);
+    transition: transform .4s cubic-bezier(.2, .9, .3, 1); }
+  body.paused .cover { transform: scale(.9); }
+  .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cover svg { width: 90px; height: 90px; }
+  .meta { position: relative; text-align: center; max-width: 100%; }
+  .meta strong { display: block; font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta span { color: rgba(255, 255, 255, .7); }
+  body.is-audio .ui { opacity: 1 !important; }
+  body.is-audio .ui > * { pointer-events: auto !important; }
+  body.is-audio .shade-top, body.is-audio .shade-bot { display: none; }
+  body.is-audio .center { top: auto; bottom: calc(var(--sb) + 116px); transform: translateX(-50%); }
+
+  .sheet { position: absolute; inset: 0; z-index: 10; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, .35); animation: fade .2s; }
+  @keyframes fade { from { opacity: 0; } }
+  .card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; border-radius: 28px 28px 0 0; padding: 16px 16px calc(var(--sb) + 16px);
+    background: rgba(30, 28, 44, .78); border: 1px solid rgba(255, 255, 255, .18); border-bottom: 0;
+    -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); display: grid; gap: 6px; animation: sup .25s cubic-bezier(.2, .9, .3, 1); }
+  @keyframes sup { from { transform: translateY(40px); } }
+  .card h3 { margin: 6px 6px 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: rgba(255, 255, 255, .6); }
+  .opt { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border: 0; border-radius: 16px; background: rgba(255, 255, 255, .08); color: #fff;
+    font: inherit; font-weight: 600; text-align: left; }
+  .opt.on { background: linear-gradient(180deg, var(--accent-hi), var(--accent)); color: var(--accent-ink); }
+  .opts-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+  .opts-row .opt { justify-content: center; }
+  .err { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 16px 22px; border-radius: 22px; text-align: center; max-width: 80vw; }
+  .err.hasbtn { display: grid; gap: 12px; }
+</style>
+</head>
+<body class="paused">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 6l9 6-9 6z" fill="currentColor"/><rect x="16" y="6" width="2.4" height="12" rx="1" fill="currentColor"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 6l-9 6 9 6z" fill="currentColor"/><rect x="5.6" y="6" width="2.4" height="12" rx="1" fill="currentColor"/></symbol>
+  <symbol id="i-nfc" viewBox="0 0 24 24"><path d="M6.5 8.5a5 5 0 0 1 0 7M9.8 6a8.6 8.6 0 0 1 0 12M13.2 3.6a12 12 0 0 1 0 16.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M17 10.2a2.2 2.2 0 1 0 0 3.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-aspect" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 10V8.5h2.5M17 14v1.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-speed" viewBox="0 0 24 24"><path d="M4.5 16a7.5 7.5 0 1 1 15 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 16l4-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-pip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="12" y="11.5" width="6.5" height="5" rx="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 12-4.9M19 12a7 7 0 0 1-12 4.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 3.5v4h-4M6.5 20.5v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l11-2v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="18.5" cy="12" r="1.8" fill="currentColor"/></symbol>
+</svg>
+
+<div class="audio" id="audio" hidden>
+  <div class="bg none" id="audio-bg"></div>
+  <div class="cover" id="cover"><svg><use href="#i-music"/></svg></div>
+  <div class="meta"><strong id="a-title"></strong><span id="a-artist"></span></div>
+</div>
+
+<div id="touch"></div>
+
+<div class="ui" id="ui">
+  <div class="shade-top"></div><div class="shade-bot"></div>
+  <div class="top">
+    <button class="ib glass" id="back" aria-label="Retour"><svg><use href="#i-back"/></svg></button>
+    <div class="title"><strong id="title"></strong><span id="pos"></span></div>
+    <button class="ib glass" id="b-cc" aria-label="Pistes et sous-titres"><svg><use href="#i-cc"/></svg></button>
+    <button class="ib glass nfc" id="b-nfc" aria-label="Envoyer par NFC"><svg><use href="#i-nfc"/></svg></button>
+  </div>
+  <div class="center">
+    <button class="cb glass" id="b-prev" aria-label="Précédent"><svg><use href="#i-prev"/></svg></button>
+    <button class="cb big glass" id="b-play" aria-label="Lecture"><svg><use href="#i-play" id="play-icon"/></svg></button>
+    <button class="cb glass" id="b-next" aria-label="Suivant"><svg><use href="#i-next"/></svg></button>
+  </div>
+  <div class="bottom">
+    <div class="seek"><span id="t-cur">0:00</span><div class="bar" id="bar"><div class="track"><div class="fill" id="fill"></div><div class="knob" id="knob"></div></div></div><span id="t-len">0:00</span></div>
+    <div class="tools glass">
+      <button id="b-lock"><svg><use href="#i-lock"/></svg></button>
+      <button id="b-aspect"><svg><use href="#i-aspect"/></svg><span id="aspect-name">Adapter</span></button>
+      <button id="b-speed"><svg><use href="#i-speed"/></svg><span id="speed-name">1×</span></button>
+      <button id="b-rotate"><svg><use href="#i-rotate"/></svg></button>
+      <button id="b-pip"><svg><use href="#i-pip"/></svg></button>
+    </div>
+  </div>
+</div>
+<button class="ib glass lock-only" id="unlock" hidden aria-label="Déverrouiller"><svg><use href="#i-lock"/></svg></button>
+<div class="hud glass" id="hud" hidden><svg id="hud-ic"><use href="#i-sun"/></svg><span id="hud-text"></span><div class="meter" id="hud-meter"><i id="hud-fill"></i></div></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const N = window.EclatPlayer || {
+  toggle() { const s = P.st; s.playing = !s.playing; player.state(s); }, seek(t) { player.time(t, P.st.length); }, seekBy(d) { player.time(P.time + d, P.st.length); },
+  next() { }, previous() { }, rate(r) { P.st.rate = r; player.state(P.st); }, scale() { player.toast('Remplir'); }, audioTrack() { }, spuTrack() { },
+  brightness() { }, getBrightness() { return .5; }, volume() { }, getVolume() { return .6; }, rotate() { }, pip() { }, bars() { }, nfc() { }, close() { },
+};
+const P = { st: { playing: false, length: 0, video: true }, time: 0, item: null, locked: false, hideTimer: null, dragging: false };
+
+const fmt = ms => {
+  if (!(ms > 0)) return '0:00';
+  const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+};
+
+function showUi(keep) {
+  document.body.classList.remove('hide');
+  N.bars(false);
+  clearTimeout(P.hideTimer);
+  if (!keep && P.st.playing && P.st.video) P.hideTimer = setTimeout(hideUi, 3500);
+}
+function hideUi() {
+  if (!P.st.video || P.dragging || document.querySelector('.sheet')) return;
+  document.body.classList.add('hide');
+}
+
+function setTime(t, len) {
+  P.time = t;
+  if (len) P.st.length = len;
+  if (P.dragging) return;
+  const p = P.st.length > 0 ? Math.min(1, t / P.st.length) : 0;
+  $('fill').style.width = (p * 100) + '%';
+  $('knob').style.left = (p * 100) + '%';
+  $('t-cur').textContent = fmt(t);
+  $('t-len').textContent = fmt(P.st.length);
+}
+
+function toast(html, ms = 2200) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div');
+  t.className = 'toast glass';
+  t.innerHTML = html;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+  return t;
+}
+
+window.player = {
+  insets(t, b, l, r) {
+    const s = document.documentElement.style;
+    s.setProperty('--st', Math.max(t, 8) + 'px'); s.setProperty('--sb', Math.max(b, 6) + 'px');
+    s.setProperty('--sl', l + 'px'); s.setProperty('--sr', r + 'px');
+  },
+  load(o) {
+    P.item = o.item;
+    const name = o.item.title || (o.item.name || '').replace(/\.[^.]+$/, '');
+    $('title').textContent = name;
+    $('pos').textContent = o.count > 1 ? `${o.index + 1} / ${o.count}` : '';
+    $('b-prev').disabled = false;
+    $('b-next').disabled = o.index >= o.count - 1;
+    $('a-title').textContent = name;
+    $('a-artist').textContent = o.item.artist || '';
+    // the cover (album art), if the song has one
+    const u = `/thumb?u=${encodeURIComponent(o.item.uri)}&m=${encodeURIComponent(o.item.mime || '')}&s=720`;
+    const img = new Image();
+    img.onload = () => {
+      $('cover').innerHTML = ''; $('cover').appendChild(img);
+      $('audio-bg').classList.remove('none'); $('audio-bg').style.backgroundImage = `url("${u}")`;
+    };
+    img.onerror = () => {
+      $('cover').innerHTML = '<svg><use href="#i-music"/></svg>';
+      $('audio-bg').classList.add('none'); $('audio-bg').style.backgroundImage = '';
+    };
+    if ((o.item.mime || '').startsWith('audio/')) img.src = u;
+    document.querySelectorAll('.err').forEach(e => e.remove());
+    setTime(0, 0);
+    showUi();
+  },
+  state(s) {
+    P.st = s;
+    document.body.classList.toggle('paused', !s.playing);
+    $('play-icon').setAttribute('href', s.playing ? '#i-pause' : '#i-play');
+    const audio = !s.video;
+    $('audio').hidden = !audio;
+    document.body.classList.toggle('is-audio', audio);
+    $('b-aspect').hidden = audio; $('b-rotate').hidden = audio; $('b-pip').hidden = audio || !s.pip; $('b-lock').hidden = audio;
+    $('b-cc').hidden = !(s.audioTracks && s.audioTracks.length > 2) && !(s.spuTracks && s.spuTracks.length > 1);
+    $('aspect-name').textContent = s.scale || 'Adapter';
+    $('speed-name').textContent = (s.rate || 1).toLocaleString('fr-FR') + '×';
+    setTime(s.time, s.length);
+    if (!s.playing) showUi(true); else if (!document.body.classList.contains('hide')) showUi();
+  },
+  time(t, len) { setTime(t, len); },
+  resumed(t) {
+    const el = toast(`Reprise à ${fmt(t)} <button>Depuis le début</button>`, 5000);
+    el.querySelector('button').onclick = () => { N.seek(0); el.remove(); };
+  },
+  ended() { showUi(true); },
+  error(msg) {
+    document.querySelectorAll('.err').forEach(e => e.remove());
+    const d = document.createElement('div');
+    d.className = 'err glass';
+    d.textContent = msg;
+    document.body.appendChild(d);
+  },
+  pip(on) { document.body.style.visibility = on ? 'hidden' : ''; },
+  toast(t) { toast(t); },
+};
+
+// buttons
+$('back').onclick = () => N.close();
+$('b-play').onclick = () => { N.toggle(); showUi(); };
+$('b-next').onclick = () => N.next();
+$('b-prev').onclick = () => N.previous();
+$('b-nfc').onclick = () => N.nfc();
+$('b-aspect').onclick = () => { N.scale(); showUi(); };
+$('b-rotate').onclick = () => { N.rotate(); showUi(); };
+$('b-pip').onclick = () => N.pip();
+$('b-lock').onclick = () => {
+  P.locked = true;
+  document.body.classList.add('hide');
+  $('unlock').hidden = false;
+  N.bars(false);
+  setTimeout(() => { if (P.locked) $('unlock').style.opacity = .35; }, 2500);
+};
+$('unlock').onclick = () => { P.locked = false; $('unlock').hidden = true; $('unlock').style.opacity = ''; showUi(); };
+
+function sheet(build) {
+  const s = document.createElement('div');
+  s.className = 'sheet';
+  const c = document.createElement('div');
+  c.className = 'card';
+  s.appendChild(c);
+  s.onclick = e => { if (e.target === s) close(); };
+  const close = () => { s.remove(); showUi(); };
+  build(c, close);
+  document.body.appendChild(s);
+  clearTimeout(P.hideTimer);
+}
+function opt(label, on, fn) {
+  const b = document.createElement('button');
+  b.className = 'opt' + (on ? ' on' : '');
+  b.textContent = label;
+  b.onclick = fn;
+  return b;
+}
+$('b-speed').onclick = () => sheet((c, close) => {
+  c.insertAdjacentHTML('beforeend', '<h3>Vitesse</h3>');
+  const row = document.createElement('div'); row.className = 'opts-row';
+  for (const r of [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]) row.appendChild(opt(r.toLocaleString('fr-FR') + '×', Math.abs((P.st.rate || 1) - r) < .01, () => { N.rate(r); close(); }));
+  c.appendChild(row);
+});
+$('b-cc').onclick = () => sheet((c, close) => {
+  const a = P.st.audioTracks || [], s = P.st.spuTracks || [];
+  if (a.length > 1) {
+    c.insertAdjacentHTML('beforeend', '<h3>Audio</h3>');
+    for (const t of a) if (t.id >= 0) c.appendChild(opt(t.name, t.id === P.st.audioTrack, () => { N.audioTrack(t.id); close(); }));
+  }
+  c.insertAdjacentHTML('beforeend', '<h3>Sous-titres</h3>');
+  if (!s.length) c.appendChild(opt('Aucun sous-titre', true, close));
+  for (const t of s) c.appendChild(opt(t.id < 0 ? 'Désactivés' : t.name, t.id === P.st.spuTrack, () => { N.spuTrack(t.id); close(); }));
+});
+
+// seek bar
+const bar = $('bar');
+function barSeek(e, commit) {
+  const r = bar.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  $('fill').style.width = (p * 100) + '%';
+  $('knob').style.left = (p * 100) + '%';
+  const t = p * (P.st.length || 0);
+  $('t-cur').textContent = fmt(t);
+  if (commit) N.seek(t);
+}
+bar.addEventListener('pointerdown', e => { bar.setPointerCapture(e.pointerId); P.dragging = true; bar.classList.add('drag'); clearTimeout(P.hideTimer); barSeek(e); });
+bar.addEventListener('pointermove', e => { if (P.dragging) barSeek(e); });
+const barUp = e => { if (!P.dragging) return; P.dragging = false; bar.classList.remove('drag'); barSeek(e, true); showUi(); };
+bar.addEventListener('pointerup', barUp);
+bar.addEventListener('pointercancel', barUp);
+
+// VLC-like gestures on the picture
+const touch = $('touch');
+const G = { x0: 0, y0: 0, mode: null, v0: 0, t0: 0, lastTap: 0, lastX: 0, tapTimer: null, seekTo: 0 };
+function hud(icon, text, level) {
+  $('hud').hidden = false;
+  $('hud-ic').innerHTML = `<use href="#${icon}"/>`;
+  $('hud-text').textContent = text;
+  $('hud-meter').hidden = level == null;
+  if (level != null) $('hud-fill').style.width = (level * 100) + '%';
+}
+touch.addEventListener('pointerdown', e => {
+  touch.setPointerCapture(e.pointerId);
+  G.x0 = e.clientX; G.y0 = e.clientY; G.mode = null;
+});
+touch.addEventListener('pointermove', e => {
+  if (G.x0 == null || P.locked) return;
+  const dx = e.clientX - G.x0, dy = e.clientY - G.y0;
+  const W = innerWidth, H = innerHeight;
+  if (!G.mode && Math.hypot(dx, dy) > 14) {
+    if (!P.st.video) { G.mode = 'none'; return; }
+    if (Math.abs(dx) > Math.abs(dy)) { G.mode = 'seek'; G.t0 = P.time; }
+    else if (G.x0 < W / 2) { G.mode = 'bright'; G.v0 = N.getBrightness(); }
+    else { G.mode = 'vol'; G.v0 = N.getVolume(); }
+  }
+  if (G.mode === 'seek') {
+    const delta = dx / W * Math.min(P.st.length || 0, 180000);
+    G.seekTo = Math.max(0, Math.min(P.st.length || 0, G.t0 + delta));
+    hud('i-speed', `${delta >= 0 ? '+' : '−'}${fmt(Math.abs(delta))}  ·  ${fmt(G.seekTo)}`);
+  } else if (G.mode === 'bright') {
+    const v = Math.max(0.01, Math.min(1, G.v0 - dy / (H * .6)));
+    N.brightness(v); hud('i-sun', Math.round(v * 100) + ' %', v);
+  } else if (G.mode === 'vol') {
+    const v = Math.max(0, Math.min(1, G.v0 - dy / (H * .6)));
+    N.volume(v); hud('i-vol', Math.round(v * 100) + ' %', v);
+  }
+});
+const touchUp = e => {
+  if (G.x0 == null) return;
+  const moved = G.mode;
+  if (G.mode === 'seek') N.seek(G.seekTo);
+  $('hud').hidden = true;
+  G.x0 = null; G.mode = null;
+  if (moved) return;
+  if (P.locked) { $('unlock').style.opacity = ''; return; }
+  // tap: show/hide; double tap on a side: ±10 s
+  const now = Date.now();
+  const x = e.clientX, W = innerWidth;
+  if (now - G.lastTap < 300 && P.st.video && (x < W * .38 || x > W * .62)) {
+    clearTimeout(G.tapTimer);
+    const fwd = x > W / 2;
+    N.seekBy(fwd ? 10000 : -10000);
+    const r = document.createElement('div');
+    r.className = 'ripple ' + (fwd ? 'r' : 'l');
+    r.textContent = fwd ? '+10 s' : '−10 s';
+    document.body.appendChild(r);
+    setTimeout(() => r.remove(), 600);
+    G.lastTap = now; // more taps: more jumps
+    return;
+  }
+  G.lastTap = now;
+  G.tapTimer = setTimeout(() => {
+    if (document.body.classList.contains('hide')) showUi(); else hideUi();
+  }, 260);
+};
+touch.addEventListener('pointerup', touchUp);
+touch.addEventListener('pointercancel', touchUp);
+
+window.playerBack = () => {
+  const s = document.querySelector('.sheet');
+  if (s) { s.remove(); return true; }
+  if (P.locked) { $('unlock').style.opacity = ''; return true; }
+  return false;
+};
+
+if (!window.EclatPlayer) { // preview in a browser
+  document.body.style.background = 'linear-gradient(135deg,#334,#776)';
+  player.load({ item: { uri: 'x', name: 'Le Grand Voyage (2026).mkv', mime: 'video/x-matroska' }, index: 2, count: 8 });
+  player.state({ playing: true, time: 754000, length: 6123000, video: true, rate: 1, scale: 'Adapter', audioTracks: [{ id: -1, name: 'Désactiver' }, { id: 1, name: 'Français' }, { id: 2, name: 'English' }], audioTrack: 1, spuTracks: [{ id: -1, name: 'Désactiver' }, { id: 3, name: 'Français (forcés)' }], spuTrack: -1, pip: true });
+}
+</script>
+</body>
+</html>

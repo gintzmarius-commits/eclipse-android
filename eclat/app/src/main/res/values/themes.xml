@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="glass_background">#EEF0F7</color>
+    <color name="ic_launcher_background">#161827</color>
+    <!-- Light, so nothing dark flashes before the page shows. -->
+    <style name="Eclat" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/glass_background</item>
+        <item name="android:colorAccent">#F6A51A</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+    <style name="Eclat.Player" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">#F6A51A</item>
+    </style>
+    <!-- The island: see-through, over whatever app is open. -->
+    <style name="Eclat.Island" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

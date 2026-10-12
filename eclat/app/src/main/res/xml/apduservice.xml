@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The phone answers as an NFC Forum Type 4 tag (NDEF application) only
+     while a file is being sent; the rest of the time it says "not here". -->
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/nfc_service"
+    android:requireDeviceUnlock="false">
+    <aid-group android:category="other" android:description="@string/nfc_service">
+        <aid-filter android:name="D2760000850101" />
+    </aid-group>
+</host-apdu-service>

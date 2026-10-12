@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Éclat</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="9.5" r="1.7" fill="currentColor"/><path d="M4 17l4.5-4.5 3.5 3.5 2.5-2.5 5.5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5.5" width="13" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 10.5l5-3v9l-5-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l11-2v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-folder-f" viewBox="0 0 24 24"><path d="M3 7.2A2.2 2.2 0 0 1 5.2 5h4.1l2.2 2.2h7.3A2.2 2.2 0 0 1 21 9.4v8.4a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 17.8z" fill="currentColor"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5M10 13h6M10 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><path d="M7 3h10v18H7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 3v2m0 2v2m0 2v2" stroke="currentColor" stroke-width="1.8"/><rect x="10.5" y="13" width="3" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-android" viewBox="0 0 24 24"><path d="M5 11a7 7 0 0 1 14 0v6H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7.5 5.5L6 3.5M16.5 5.5l1.5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.5" cy="9.5" r="1" fill="currentColor"/><circle cx="14.5" cy="9.5" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M10.3 3.2h3.4l.5 2.4 1.6.9 2.3-.8 1.7 2.9-1.8 1.6v1.6l1.8 1.6-1.7 2.9-2.3-.8-1.6.9-.5 2.4h-3.4l-.5-2.4-1.6-.9-2.3.8-1.7-2.9 1.8-1.6v-1.6L4.2 8.6l1.7-2.9 2.3.8 1.6-.9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M4 7h3.5c4.5 0 4.5 10 9 10H20M4 17h3.5c1.6 0 2.6-1.3 3.4-3M20 7h-3.5c-1.6 0-2.6 1.3-3.4 3M17.5 4.5L20 7l-2.5 2.5M17.5 14.5L20 17l-2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M8 7.5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10.5H6a1.5 1.5 0 0 0-1.5 1.5v7A1.5 1.5 0 0 0 6 20.5h12a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-nfc" viewBox="0 0 24 24"><path d="M6.5 8.5a5 5 0 0 1 0 7M9.8 6a8.6 8.6 0 0 1 0 12M13.2 3.6a12 12 0 0 1 0 16.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5l-8 8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V6M6.5 11.5L12 6l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-apple" viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.9-3-.9C7 7.3 5.5 8.2 4.7 9.7c-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.8zM14.2 5.8c.6-.8 1.1-1.8 1-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1 .1 2.1-.5 2.7-1.3z" fill="currentColor"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3.5 9.5a12 12 0 0 1 17 0M6.5 12.7a7.5 7.5 0 0 1 11 0M9.5 15.8a3.2 3.2 0 0 1 5 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+</svg>
+
+<header class="top">
+  <button class="icon-btn" id="back" hidden aria-label="Retour"><svg><use href="#i-back"/></svg></button>
+  <div class="brand" id="brand"><div class="mark"></div><span id="brand-text">Éclat</span></div>
+  <button class="icon-btn" id="btn-settings" aria-label="Réglages"><svg><use href="#i-gear"/></svg></button>
+</header>
+
+<main class="content" id="content">
+  <!-- Permission -->
+  <section class="view" id="v-perm" hidden>
+    <div class="panel note">
+      <div class="big-ic"><svg><use href="#i-photo"/></svg></div>
+      <h2>Tes photos, vidéos et musiques</h2>
+      <p class="muted">Éclat a besoin d'y accéder pour les afficher et les lire. Rien ne quitte ton téléphone, sauf ce que tu envoies toi-même.</p>
+      <button class="btn primary wide" id="btn-perm">Autoriser l'accès</button>
+      <button class="link-btn btn wide" id="btn-perm-settings" hidden>Ouvrir les réglages d'Éclat</button>
+    </div>
+  </section>
+
+  <!-- Photos & videos -->
+  <section class="view" id="v-photos" hidden>
+    <div class="hello"><div><h1>Photos</h1><p class="count" id="ph-count"></p></div></div>
+    <div class="panel banner" id="ph-partial" hidden>
+      <div class="ic"><svg><use href="#i-eye"/></svg></div>
+      <div class="txt"><strong>Accès limité</strong><span>Tu as choisi quelques photos seulement.</span></div>
+      <button class="btn pill-sm" id="ph-more">Tout voir</button>
+    </div>
+    <div class="chips" id="albums"></div>
+    <div id="photos"></div>
+    <div class="more" id="ph-more-load" hidden><span class="spin"></span>Chargement…</div>
+  </section>
+
+  <section class="view" id="v-videos" hidden>
+    <div class="hello"><div><h1>Vidéos</h1><p class="count" id="vi-count"></p></div></div>
+    <div class="grid videos" id="videos"></div>
+  </section>
+
+  <section class="view" id="v-music" hidden>
+    <div class="hello"><div><h1>Musique</h1><p class="count" id="mu-count"></p></div></div>
+    <div class="music-head" id="mu-head" hidden>
+      <button class="btn primary" id="mu-play"><svg><use href="#i-play"/></svg>Tout lire</button>
+      <button class="btn" id="mu-shuffle"><svg><use href="#i-shuffle"/></svg>Aléatoire</button>
+    </div>
+    <div class="list" id="music"></div>
+  </section>
+
+  <section class="view" id="v-files" hidden>
+    <div class="hello"><div><h1>Fichiers</h1></div></div>
+    <div class="panel banner" id="fi-perm" hidden>
+      <div class="ic"><svg><use href="#i-folder"/></svg></div>
+      <div class="txt"><strong>Voir tous tes fichiers</strong><span>Android demande une autorisation pour les documents, archives et autres fichiers.</span></div>
+      <button class="btn pill-sm primary" id="fi-allow">Autoriser</button>
+    </div>
+    <div class="chips" id="places"></div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="list" id="files"></div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-tab="photos"><svg><use href="#i-photo"/></svg>Photos</button>
+  <button class="tab" data-tab="videos"><svg><use href="#i-video"/></svg>Vidéos</button>
+  <button class="tab" data-tab="music"><svg><use href="#i-music"/></svg>Musique</button>
+  <button class="tab" data-tab="files"><svg><use href="#i-folder"/></svg>Fichiers</button>
+</nav>
+
+<!-- Photo viewer -->
+<div class="viewer" id="viewer" hidden>
+  <div class="stage" id="stage"></div>
+  <div class="vbar top">
+    <button class="icon-btn dark" id="vw-back" aria-label="Retour"><svg><use href="#i-back"/></svg></button>
+    <div class="txt"><strong id="vw-name"></strong><span id="vw-date"></span></div>
+  </div>
+  <div class="lift glass-dark" id="lift"><svg class="waves"><use href="#i-nfc"/></svg><span id="lift-text">Glisse pour envoyer</span></div>
+  <div class="swipe-hint glass-dark" id="vw-hint" hidden><svg><use href="#i-up"/></svg>Glisse vers le haut pour envoyer par NFC</div>
+  <div class="vbar bottom">
+    <div class="vtools glass-dark">
+      <button id="vw-share"><svg><use href="#i-share"/></svg>Partager</button>
+      <button class="nfc" id="vw-nfc"><svg><use href="#i-nfc"/></svg>NFC</button>
+      <button id="vw-info"><svg><use href="#i-info"/></svg>Infos</button>
+      <button id="vw-open"><svg><use href="#i-open"/></svg>Ouvrir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sending by NFC -->
+<div class="send" id="send" hidden>
+  <button class="icon-btn close" id="sd-close" aria-label="Fermer"><svg><use href="#i-x"/></svg></button>
+  <div class="beam" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="pcard" id="sd-card"></div>
+  <div class="fname" id="sd-name"></div>
+  <h2 id="sd-title">Préparation…</h2>
+  <p class="sub" id="sd-sub"></p>
+  <div class="devices" id="sd-devices">
+    <span><svg><use href="#i-android"/></svg>Android avec Éclat</span>
+    <span><svg><use href="#i-apple"/></svg>iPhone, même Wi-Fi</span>
+  </div>
+  <div class="actions" id="sd-actions"></div>
+</div>
+
+<!-- Long press: what to do with a file -->
+<div class="sheet" id="s-menu" hidden>
+  <div class="panel card">
+    <div class="grab"></div>
+    <div class="file-head"><div class="ic" id="m-ic"></div><div class="txt"><strong id="m-name"></strong><span id="m-meta"></span></div></div>
+    <div class="menu">
+      <button class="menu-row" id="m-open"><svg><use href="#i-eye"/></svg><span>Ouvrir</span></button>
+      <button class="menu-row nfc" id="m-nfc"><svg><use href="#i-nfc"/></svg><span>Partager via NFC<small>Approche un autre téléphone, comme AirDrop</small></span></button>
+      <button class="menu-row" id="m-share"><svg><use href="#i-share"/></svg><span>Partager…</span></button>
+      <button class="menu-row" id="m-with"><svg><use href="#i-open"/></svg><span>Ouvrir avec…</span></button>
+      <button class="menu-row" id="m-info"><svg><use href="#i-info"/></svg><span>Infos</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Details -->
+<div class="sheet" id="s-info" hidden>
+  <div class="panel card">
+    <div class="grab"></div>
+    <h2 id="i-name"></h2>
+    <dl class="kv" id="i-kv"></dl>
+    <button class="btn wide" data-close="s-info">Fermer</button>
+  </div>
+</div>
+
+<!-- Settings / about -->
+<div class="sheet" id="s-settings" hidden>
+  <div class="panel card">
+    <div class="grab"></div>
+    <div class="file-head"><div class="mark" style="width:52px;height:52px"></div><div class="txt"><strong>Éclat</strong><span>Lecteur et gestionnaire de fichiers</span></div></div>
+    <div class="help">
+      <p><b>Envoyer par NFC.</b> Ouvre une photo et glisse-la vers le haut, ou appuie longuement sur un fichier → « Partager via NFC ». Puis mets les deux téléphones dos contre dos.</p>
+      <p><b>Sur Android</b>, l'autre téléphone doit avoir Éclat (même fermé) : une bulle apparaît en haut de l'écran, il suffit de toucher « Accepter ».</p>
+      <p><b>Sur iPhone</b> (XS ou plus récent, écran allumé), sur le même Wi-Fi : une notification s'affiche, elle ouvre la page de téléchargement dans Safari.</p>
+      <p class="muted">Le fichier passe par le Wi-Fi (le NFC sert à se trouver). Sans Wi-Fi, le téléphone qui envoie crée un petit réseau Wi-Fi pour l'autre téléphone Android.</p>
+    </div>
+    <div class="menu">
+      <button class="menu-row" id="st-nfc"><svg><use href="#i-nfc"/></svg><span>NFC<small id="st-nfc-state"></small></span><svg class="chev"><use href="#i-chev"/></svg></button>
+      <button class="menu-row" id="st-perm"><svg><use href="#i-lock"/></svg><span>Autorisations<small>Photos, musique, fichiers, notifications</small></span><svg class="chev"><use href="#i-chev"/></svg></button>
+    </div>
+    <p class="ver" id="st-ver"></p>
+    <p class="ver">Lecture vidéo et audio : moteur de VLC (libVLC, VideoLAN, LGPL). Licence GPL v3.</p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

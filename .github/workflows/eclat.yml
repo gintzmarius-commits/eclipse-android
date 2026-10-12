@@ -1,0 +1,150 @@
+name: Build Éclat APK
+
+on:
+  push:
+    # main publishes the APK; other branches make a private test build
+    branches: [main, "dev/**", "claude/**"]
+    paths: ["eclat/**", "scripts/eclat_smoke.sh", "scripts/ui_find.py", ".github/workflows/eclat.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-eclat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Tests (NFC tag, link, transfer)
+        run: |
+          mkdir -p /tmp/t
+          scripts/ci_run.sh "Tests Éclat" bash -c "javac -encoding UTF-8 -d /tmp/t eclat/app/src/main/java/com/eclipse/eclat/share/{ShareLink,Ndef,Type4Tag,ShareServer,Fetch}.java eclat/tests/*.java && java -Dstdout.encoding=UTF-8 -cp /tmp/t ShareTest"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      - name: Build
+        working-directory: eclat
+        env:
+          ECLIPSE_KEYSTORE: ${{ github.workspace }}/signing/eclipse.keystore
+          ECLIPSE_KEYSTORE_PASSWORD: eclipse-public-key
+        run: ../scripts/ci_run.sh "Compilation Éclat" gradle --no-daemon --stacktrace assembleRelease
+
+      - name: The APK
+        run: |
+          cp "$(ls eclat/app/build/outputs/apk/release/*.apk | head -1)" Eclat.apk
+          ls -la Eclat.apk
+          unzip -l Eclat.apk | grep -E "libvlc|assets/ui" | head -20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eclat-apk
+          path: Eclat.apk
+
+  emulator:
+    # Éclat used like a person would on Android 8 to 16 (scripts/eclat_smoke.sh):
+    # receiving a file "by NFC" from start to end, the VLC player.
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 30, 34, 36]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: eclat-apk
+          path: apk
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Test sender (the computer plays the sending phone)
+        run: |
+          mkdir -p /tmp/t
+          javac -encoding UTF-8 -d /tmp/t eclat/app/src/main/java/com/eclipse/eclat/share/{ShareLink,Ndef,Type4Tag,ShareServer,Fetch}.java eclat/tests/*.java
+          sudo apt-get install -y -qq ffmpeg > /dev/null 2>&1 || true
+          pip install -q pillow 2>/dev/null || true
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android ${{ matrix.api }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/eclat_smoke.sh apk/Eclat.apk out /tmp/t
+      - name: Results
+        if: always()
+        run: |
+          cat out/result.txt || true
+          if [ -f out/result.txt ]; then
+            sum=$(grep -E "^(FAIL|SMOKE)" out/result.txt | tr '\n' ' ' | cut -c1-900)
+            echo "::notice title=Éclat Android API ${{ matrix.api }}::${sum:-pas de résultat}"
+          fi
+          tar czf "eclat-api${{ matrix.api }}.tgz" out || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eclat-api${{ matrix.api }}
+          path: eclat-api${{ matrix.api }}.tgz
+
+  release:
+    needs: [apk, emulator]
+    if: always() && needs.apk.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+          merge-multiple: true
+      - name: Emulator results
+        run: |
+          for f in art/eclat-api*.tgz; do echo "== $f"; tar xzf "$f" -O out/result.txt 2>/dev/null || echo "(pas de résultat)"; done
+
+      - name: Test build (private draft)
+        if: github.ref != 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete eclat-test-build -y --cleanup-tag 2>/dev/null || true
+          gh release create eclat-test-build art/Eclat.apk art/eclat-api*.tgz --draft --prerelease \
+            --title "Éclat — build de test ($(cat eclat/VERSION), ${GITHUB_SHA::7}, émulateurs : ${{ needs.emulator.result }})" --notes "Build de test, pas une version publiée."
+
+      - name: Publish (only if it works on every emulator)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ needs.emulator.result }}" != "success" ]; then
+            echo "::error::Éclat ne passe pas le test sur émulateur : rien n'est publié."
+            exit 1
+          fi
+          VERSION=$(cat eclat/VERSION)
+          gh release delete "eclat-v$VERSION" -y --cleanup-tag 2>/dev/null || true
+          # Eclipse stays the repository's "latest" release.
+          gh release create "eclat-v$VERSION" art/Eclat.apk \
+            --title "Éclat $VERSION" --notes-file eclat/RELEASE_NOTES.md --latest=false

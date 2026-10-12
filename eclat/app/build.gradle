@@ -1,0 +1,68 @@
+plugins {
+    id 'com.android.application'
+}
+
+def eclatVersion = file('../VERSION').text.trim()
+def (vMajor, vMinor, vPatch) = eclatVersion.tokenize('.').collect { it as int }
+
+android {
+    namespace 'com.eclipse.eclat'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.eclipse.eclat'
+        minSdk 26
+        targetSdk 35
+        versionCode vMajor * 10000 + vMinor * 100 + vPatch
+        versionName eclatVersion
+        ndk {
+            // phones (arm) and the Android emulator (x86_64)
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+    }
+
+    signingConfigs {
+        eclipse {
+            // The same public key as Eclipse: each new APK installs over the previous one.
+            storeFile file(System.getenv("ECLIPSE_KEYSTORE") ?: "../../signing/eclipse.keystore")
+            storePassword System.getenv("ECLIPSE_KEYSTORE_PASSWORD") ?: "eclipse-public-key"
+            keyAlias System.getenv("ECLIPSE_KEY_ALIAS") ?: "eclipse"
+            keyPassword System.getenv("ECLIPSE_KEY_PASSWORD") ?: (System.getenv("ECLIPSE_KEYSTORE_PASSWORD") ?: "eclipse-public-key")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.eclipse
+        }
+        debug {
+            signingConfig signingConfigs.eclipse
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // VLC's engine (LGPL 2.1+): https://code.videolan.org/videolan/libvlcjni
+    implementation 'org.videolan.android:libvlc-all:3.6.5'
+}
