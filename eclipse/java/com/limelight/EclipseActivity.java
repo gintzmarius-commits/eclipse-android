@@ -187,6 +187,11 @@ public class EclipseActivity extends Activity {
         density = getResources().getDisplayMetrics().density;
         setupWindow();
 
+        // Emulator tests only: a file only root can create lets the test
+        // drive the page (Chrome DevTools protocol, over adb).
+        if (new java.io.File(getFilesDir(), "test-webview-debug").exists()) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#EEF0F7"));
         WebSettings s = web.getSettings();
@@ -1605,12 +1610,13 @@ public class EclipseActivity extends Activity {
 
     /** Android 8 and 9: saving in Downloads needs a permission. */
     private void withStorage(Runnable r) {
-        if (Build.VERSION.SDK_INT >= 29 || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 29 || (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED)) {
             r.run();
             return;
         }
         afterStorage = r;
-        requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
+        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
     }
 
     @Override

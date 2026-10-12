@@ -551,7 +551,6 @@ func (s *fileServer) link(id, name string) *phoneLink {
 		log.Printf("files: phone %q connected", name)
 	}
 	l.name = name
-	l.lastSeen = time.Now()
 	return l
 }
 
@@ -571,8 +570,8 @@ func (s *fileServer) devices(includePC bool, except string) []deviceView {
 	s.mu.Lock()
 	var ps []deviceView
 	for _, l := range s.phones {
-		if l.id == except {
-			continue
+		if l.id == except || (l.lastSeen.IsZero() && l.polling == 0) {
+			continue // never shared its files (only browsed this PC's)
 		}
 		on := l.polling > 0 || time.Since(l.lastSeen) < phoneOnline
 		if !on && time.Since(l.lastSeen) > 7*24*time.Hour {

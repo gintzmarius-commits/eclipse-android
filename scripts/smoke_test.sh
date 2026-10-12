@@ -333,15 +333,38 @@ if [ $TUNNEL = 1 ] && [ "${PAIRED:-0}" = 1 ] && [ -n "${PC_URL_FILE:-}" ] && [ -
   PCBASE=${PCURL%%/?t=*}
   PCTOKEN=${PCURL##*t=}
   pcapi() { curl -s -m 90 -H "X-Token: $PCTOKEN" "$@"; }
-  [ "$API" -lt 29 ] && adb shell pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
+  if [ "$API" -lt 29 ]; then
+    adb shell pm grant $PKG android.permission.READ_EXTERNAL_STORAGE > /dev/null 2>&1
+    adb shell pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
+  fi
+  # The page is driven through Chrome's DevTools protocol (test hook): the
+  # accessibility tree of web pages is not reliable on every Android version.
+  CTX=$(adb shell stat -c %C /data/data/$PKG | tr -d '\r')
+  OWN=$(adb shell stat -c %u:%g /data/data/$PKG | tr -d '\r')
+  adb shell "mkdir -p /data/data/$PKG/files && touch /data/data/$PKG/files/test-webview-debug && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files; restorecon -R /data/data/$PKG/files"
   home_screen
-  if tap "=Fichiers" && wait_text "Dossier personnel" 60; then
+  sleep 2
+  SOCK=$(adb shell cat /proc/net/unix | grep -o 'webview_devtools_remote_[0-9]*' | head -1)
+  adb forward tcp:9555 "localabstract:$SOCK" > /dev/null 2>&1
+  js() { python3 "$HERE/ui_cdp.py" 9555 "$1" 2>> "$OUT/cdp.log"; }
+  js_wait() { # <condition> <seconds>
+    local end=$((SECONDS + $2))
+    while [ $SECONDS -lt $end ]; do
+      [ "$(js "$1")" = "true" ] && return 0
+      sleep 1
+    done
+    return 1
+  }
+  ROW='(n => [...document.querySelectorAll(".fx-row")].find(e => e.querySelector("b") && e.querySelector("b").textContent === n))'
+  if [ -z "$SOCK" ] || [ "$(js '1+1')" != "2" ]; then
+    fail "page non pilotable (DevTools : ${SOCK:-pas de socket})"
+  elif js 'document.querySelector(".btab[data-tab=files]").click(), true' > /dev/null && js_wait 'document.body.innerText.includes("Dossier personnel")' 60; then
     note "OK le téléphone voit les dossiers du PC"
     shot 14-files-roots
-    if tap "=Documents" && wait_text "rapport-eclipse.txt" 40; then
+    js "(r => r ? (r.click(), true) : false)($ROW(\"Documents\"))" > /dev/null
+    if js_wait 'document.body.innerText.includes("rapport-eclipse.txt")' 40; then
       note "OK dossier du PC ouvert"
-      # the download button of the file's row
-      tap "=Télécharger"
+      js "(r => r ? (r.querySelector(\".fx-dl\").click(), true) : false)($ROW(\"rapport-eclipse.txt\"))" > /dev/null
       ok=0
       for i in $(seq 1 40); do
         sleep 1
@@ -349,12 +372,12 @@ if [ $TUNNEL = 1 ] && [ "${PAIRED:-0}" = 1 ] && [ -n "${PC_URL_FILE:-}" ] && [ -
       done
       shot 15-files-download
       if [ $ok = 1 ]; then note "OK fichier du PC téléchargé sur le téléphone (après $i s)"
-      else fail "le fichier du PC n'a pas été téléchargé sur le téléphone"; fi
+      else fail "le fichier du PC n'a pas été téléchargé sur le téléphone ($(js 'document.querySelector(".fx-transfers").innerText' | tr '\n' ' '))"; fi
     else
-      fail "le dossier Documents du PC ne s'ouvre pas"; shot 15-files-download
+      fail "le dossier Documents du PC ne s'ouvre pas ($(js 'document.querySelector(".fx-msg").innerText'))"; shot 15-files-download
     fi
   else
-    fail "le téléphone ne voit pas les fichiers du PC"; shot 14-files-roots
+    fail "le téléphone ne voit pas les fichiers du PC ($(js 'document.querySelector(".fx-msg") && document.querySelector(".fx-msg").innerText'))"; shot 14-files-roots
   fi
 
   # This phone's files, seen from the PC.
@@ -366,7 +389,7 @@ if [ $TUNNEL = 1 ] && [ "${PAIRED:-0}" = 1 ] && [ -n "${PC_URL_FILE:-}" ] && [ -
   fi
   [ "$API" -ge 33 ] && adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS > /dev/null 2>&1
   adb shell "mkdir -p /sdcard/Download && echo 'Photo du telephone' > /sdcard/Download/eclipse-phone.txt"
-  tap "Partager les fichiers" > /dev/null
+  js 'document.querySelector(".share-head").click(), true' > /dev/null
   PHID=""
   for i in $(seq 1 90); do
     sleep 1
@@ -408,7 +431,9 @@ print(d[0]["id"] if d else "")' 2>/dev/null)
     fail "plantage pendant le partage de fichiers : $(head -1 "$OUT/part5-crashes.txt")"
   fi
   # Sharing off again for the next part.
-  adb shell am stopservice -n $PKG/com.limelight.EclipseShare > /dev/null 2>&1
+  js 'document.querySelector(".share-head").click(), true' > /dev/null
+  adb forward --remove tcp:9555 > /dev/null 2>&1
+  adb shell rm -f /data/data/$PKG/files/test-webview-debug
 fi
 
 # ---------------------------------------------------------------- part 4
