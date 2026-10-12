@@ -128,6 +128,24 @@ const handlers = {
       setRemoteSub();
     }
   },
+  update(ev) {
+    const box = $("#upd");
+    const mb = ev.size ? ` (${Math.round(ev.size / 1048576)} Mo)` : "";
+    $("#upd-go").hidden = ev.stage !== "available";
+    $("#upd-bar").hidden = ev.stage !== "download";
+    if (ev.stage === "available") {
+      $("#upd-text").textContent = `Eclipse ${ev.version} est disponible${mb}. Sur le Wi-Fi, il s'installe tout seul.`;
+    } else if (ev.stage === "download") {
+      $("#upd-text").textContent = `Mise à jour vers Eclipse ${ev.version}… ${ev.percent} %`;
+      $("#upd-bar div").style.width = ev.percent + "%";
+    } else if (ev.stage === "install") {
+      $("#upd-text").textContent = `Installation d'Eclipse ${ev.version}… Eclipse va redémarrer.`;
+    } else if (ev.stage === "error") {
+      box.hidden = true;
+      return toast(ev.error || "La mise à jour a échoué.", true, 5000);
+    }
+    box.hidden = false;
+  },
   diag(text) {
     $("#diag-text").textContent = text;
   },
@@ -580,6 +598,11 @@ $("#m-remove").onclick = () => {
 
 $("#btn-settings").onclick = () => openSheet("s-settings");
 $("#set-stream").onclick = () => { closeSheet("s-settings"); N.openSettings(); };
+$("#upd-go").onclick = () => {
+  $("#upd-go").hidden = true;
+  $("#upd-text").textContent = "Téléchargement…";
+  N.updateNow();
+};
 $("#set-classic").onclick = () => { closeSheet("s-settings"); N.openClassic(); };
 $("#set-diag").onclick = () => {
   closeSheet("s-settings");
@@ -680,5 +703,6 @@ function demoNative() {
     remove: () => {}, openSettings: () => {}, openClassic: () => {}, toast: (m) => toast(m),
     diagnostic: () => later(() => window.ec.on("diag", "Eclipse 2.2.1 (aperçu)\nAndroid 14 (API 34), Google Pixel 7, arm64-v8a\nTailscale intégré : oui\nAucun arrêt anormal récent.\n")),
     copy: () => {},
+    updateNow: () => {},
   };
 }

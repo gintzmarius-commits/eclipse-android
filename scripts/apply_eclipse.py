@@ -236,6 +236,10 @@ ECLIPSE_ACTIVITY = """<activity
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_ui" />
+        <!-- Result of an update of Eclipse (EclipseUpdate) -->
+        <receiver
+            android:name=".EclipseUpdate$Receiver"
+            android:exported="false" />
         <!-- Built-in Tailscale, in its own process: if it ever fails,
              Eclipse itself stays open -->
         <provider
@@ -256,6 +260,9 @@ def manifest(t):
     t = t[:a] + ECLIPSE_ACTIVITY + stripped + t[end:]
     # Eclipse checks whether the Tailscale app is installed (Android 11+
     # only shows apps that are declared here).
+    # Eclipse updates itself (EclipseUpdate): Android's installer, and no
+    # confirmation for the next updates once the first one was confirmed.
+    t = must_sub(r"(\n    <application\b)", "\n    <uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\" />\n    <uses-permission android:name=\"android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION\" />\n\\1", t, count=1)
     return must_sub(r"(\n    <application\b)", "\n    <queries>\n        <package android:name=\"com.tailscale.ipn\" />\n    </queries>\n\\1", t, count=1)
 
 edit(app / "src/main/AndroidManifest.xml", manifest)

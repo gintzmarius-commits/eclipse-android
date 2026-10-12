@@ -212,3 +212,11 @@ input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rg
 .everywhere { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--ok, #1e9e5a); font-weight: 600; margin-top: 8px; }
 .everywhere svg { width: 16px; height: 16px; }
 #q-remote-wait .spin { margin-right: 6px; vertical-align: -3px; }
+
+/* Update of the app */
+.upd { position: fixed; z-index: 29; left: 16px; right: 16px; bottom: calc(var(--sb) + 16px); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  padding: 12px 14px; border-radius: 18px; background: rgba(255, 255, 255, .86); border: 1px solid rgba(246, 165, 26, .45);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .12); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); font-size: 14px; font-weight: 600; }
+.upd > span { flex: 1; min-width: 60%; }
+.upd-bar { flex-basis: 100%; height: 6px; border-radius: 99px; background: rgba(0, 0, 0, .07); overflow: hidden; }
+.upd-bar div { height: 100%; width: 0; background: linear-gradient(90deg, #ffcf5c, #f6a51a); transition: width .3s; }

@@ -139,6 +139,7 @@ public class EclipseActivity extends Activity {
         EclipseTunnel.init(this);
         if (savedInstanceState == null) {
             takeQrLink(getIntent());
+            checkUpdate(false);
         }
 
         // Like Moonlight's home screen: remember the GPU name once, the video
@@ -1499,6 +1500,26 @@ public class EclipseActivity extends Activity {
     // Talking to the page
     // ------------------------------------------------------------------
 
+    /** New version of Eclipse: checked each time Eclipse opens. */
+    private void checkUpdate(final boolean asked) {
+        new Thread("eclipse-update") {
+            @Override
+            public void run() {
+                try {
+                    if (!asked) Thread.sleep(1500); // let the screen appear first
+                } catch (InterruptedException e) {
+                    return;
+                }
+                EclipseUpdate.check(getApplicationContext(), new EclipseUpdate.Listener() {
+                    @Override
+                    public void onUpdate(JSONObject ev) {
+                        emit("update", ev.toString());
+                    }
+                }, asked);
+            }
+        }.start();
+    }
+
     private void emit(final String event, final String json) {
         if (web == null) return;
         final String js = "window.ec && window.ec.on(" + JSONObject.quote(event) + "," + json + ")";
@@ -1539,6 +1560,12 @@ public class EclipseActivity extends Activity {
         @JavascriptInterface
         public String version() {
             return BuildConfig.VERSION_NAME;
+        }
+
+        /** "Mettre à jour" on the banner (mobile data: download on request). */
+        @JavascriptInterface
+        public void updateNow() {
+            checkUpdate(true);
         }
 
         @JavascriptInterface

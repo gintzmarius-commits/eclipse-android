@@ -275,6 +275,55 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------- part 4
+# Eclipse updates itself when it opens: a "newer version" published on a
+# local test server (same APK) is downloaded, checked and handed to
+# Android's installer; the update is confirmed like a person would.
+note "== 4. Mise à jour automatique de l'appli"
+P4_FROM=$(wc -l < "$OUT/logcat.txt")
+SRV=$(mktemp -d)
+cp "$APK" "$SRV/Eclipse.apk"
+SUM=$(sha256sum "$APK" | cut -d' ' -f1)
+SIZE=$(stat -c %s "$APK")
+printf '{"tag_name":"v99.0.0","assets":[{"name":"Eclipse.apk","size":%s,"browser_download_url":"http://10.0.2.2:48300/Eclipse.apk","digest":"sha256:%s"}]}' "$SIZE" "$SUM" > "$SRV/latest"
+(cd "$SRV" && python3 -m http.server 48300 > /dev/null 2>&1) &
+HTTPD=$!
+sleep 1
+BEFORE=$(adb shell dumpsys package $PKG | grep -m1 lastUpdateTime | tr -d '\r')
+launch; sleep 2
+CTX=$(adb shell stat -c %C /data/data/$PKG | tr -d '\r')
+OWN=$(adb shell stat -c %u:%g /data/data/$PKG | tr -d '\r')
+adb shell "mkdir -p /data/data/$PKG/files && echo 'http://10.0.2.2:48300/latest' > /data/data/$PKG/files/test-update-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files"
+adb shell am force-stop "$PKG"
+sleep 1
+launch
+ok=0
+for i in $(seq 1 90); do
+  sleep 1
+  if grep -q "update handed to the installer" "$OUT/logcat.txt"; then ok=1; break; fi
+done
+if [ $ok = 1 ]; then note "OK nouvelle version téléchargée, vérifiée et confiée à l'installateur (après $i s)"
+else fail "la mise à jour n'a pas été téléchargée"; fi
+sleep 3
+shot 12-update-confirm
+for b in "=Update" "=Install" "=Mettre à jour" "=Installer"; do tap "$b" > /dev/null 2>&1 && break; done
+ok=0
+for i in $(seq 1 60); do
+  sleep 1
+  AFTER=$(adb shell dumpsys package $PKG | grep -m1 lastUpdateTime | tr -d '\r')
+  if [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then ok=1; break; fi
+done
+if [ $ok = 1 ]; then note "OK l'appli s'est mise à jour ($AFTER)"
+else fail "l'appli ne s'est pas mise à jour ($BEFORE)"; fi
+kill $HTTPD 2>/dev/null
+adb shell "rm -f /data/data/$PKG/files/test-update-url"
+launch
+wait_alive 10 "après la mise à jour" && shot 13-after-update
+tail -n +"$((P4_FROM + 1))" "$OUT/logcat.txt" > "$OUT/logcat-part4.txt"
+if eclipse_crashes "$OUT/logcat-part4.txt" > "$OUT/part4-crashes.txt"; then
+  fail "plantage pendant la mise à jour : $(head -1 "$OUT/part4-crashes.txt")"
+fi
+
 sleep 2
 kill $LOGCAT 2>/dev/null
 adb logcat -b crash -d > "$OUT/crash.txt" 2>&1
