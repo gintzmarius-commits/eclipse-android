@@ -26,7 +26,7 @@ cp /tmp/e2e.log "${GITHUB_WORKSPACE:-/tmp}/tunnel-e2e.log" || true
 grep -E "^(--- |ok|PASS|FAIL)|tcp:|udp burst|video:|discover|phone status" /tmp/e2e.log || true
 # The test PC on a private Tailscale network, for the emulator tests.
 go test -c -o "${GITHUB_WORKSPACE:-/tmp}/fakepc.test" .
-go install golang.org/x/mobile/cmd/gomobile@latest golang.org/x/mobile/cmd/gobind@latest
+retry go install golang.org/x/mobile/cmd/gomobile@latest golang.org/x/mobile/cmd/gobind@latest
 export PATH="$PATH:$(go env GOPATH)/bin"
 export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)}"
 echo "NDK: $ANDROID_NDK_HOME"
