@@ -49,20 +49,37 @@ public final class EclipseTunnel {
     public static void init(Context c) {
         if (app == null) app = c.getApplicationContext();
         if (shipped == null) {
-            shipped = libraryShipped();
-            disabled = crashes() >= MAX_CRASHES;
-            if (disabled) LimeLog.warning("Eclipse: built-in Tailscale switched off after repeated failures");
+            // Reading the APK takes a moment on a slow phone: not on the
+            // screen's thread (the answer is ready long before it is needed).
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    check();
+                }
+            }, "eclipse-tunnel-check").start();
         }
+    }
+
+    private static synchronized void check() {
+        if (shipped != null || app == null) return;
+        disabled = crashes() >= MAX_CRASHES;
+        if (disabled) LimeLog.warning("Eclipse: built-in Tailscale switched off after repeated failures");
+        shipped = libraryShipped();
+    }
+
+    private static boolean shipped() {
+        if (shipped == null) check();
+        return Boolean.TRUE.equals(shipped);
     }
 
     /** False on phones the library was not built for, or if it keeps failing here. */
     public static boolean available() {
-        return app != null && Boolean.TRUE.equals(shipped) && !disabled;
+        return app != null && shipped() && !disabled;
     }
 
     /** It was switched off because it kept failing on this phone. */
     public static boolean failedHere() {
-        return app != null && Boolean.TRUE.equals(shipped) && disabled;
+        return app != null && shipped() && disabled;
     }
 
     // ---- is the library in the APK, for the ABI this app runs as? ----

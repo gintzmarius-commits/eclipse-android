@@ -88,12 +88,34 @@ launch() {
   done
   return 1
 }
+# clear_dialogs: closes "Eclipse has stopped" dialogs left by part 2's
+# deliberate crashes (Android 8 shows them even with hide_error_dialogs)
+clear_dialogs() {
+  local i xy
+  for i in 1 2 3 4 5 6; do
+    dump dlg
+    xy=$(python3 - "$OUT/dlg.xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+for n in ET.parse(sys.argv[1]).iter("node"):
+    if (n.get("resource-id") or "") in ("android:id/aerr_close", "android:id/aerr_wait"):
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.get("bounds") or "")
+        if m:
+            a, b, c, d = map(int, m.groups()); print((a + c) // 2, (b + d) // 2); sys.exit(0)
+sys.exit(1)
+PY
+) || return 0
+    adb shell input tap $xy
+    note "  (fenêtre d'erreur système fermée)"
+    sleep 1
+  done
+}
 # back to Eclipse's home screen, nothing open over it
 home_screen() {
   adb shell am force-stop "$PKG"
   sleep 1
   launch
   sleep 3
+  clear_dialogs
 }
 # crashes of Eclipse's own processes in a log file
 eclipse_crashes() {
@@ -232,6 +254,7 @@ if [ $TUNNEL = 1 ]; then
   fi
   wait_alive 3 "fin"
   adb shell "rm -f $D/test-crash" > /dev/null 2>&1
+  clear_dialogs
 fi
 
 # ---------------------------------------------------------------- part 3
@@ -248,6 +271,7 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   D=/data/data/$PKG/files/tailscale
   adb shell "mkdir -p $D && echo '$CTRL' > $D/test-control-url && chown -R $OWN /data/data/$PKG/files && chcon -R $CTX /data/data/$PKG/files; restorecon -R /data/data/$PKG/files"
   launch
+  clear_dialogs
   wait_alive 4 "lancement"
   QR3="eclipse://pair?a=192.168.77.77&id=DE7509DC-6D80-5E2F-7700-BF75D0205FCB&n=Lenovo+500w+Gen+5&p=1234&port=47989&t=abcdefgh&tl=1&ts=$PCIP&tu=test%40example.com&v=1"
   adb shell "am start -W -a android.intent.action.VIEW -d '$QR3' $PKG" > /dev/null 2>&1
@@ -259,6 +283,7 @@ if [ $TUNNEL = 1 ] && [ -n "${FAKE_PC:-}" ] && [ -s "$FAKE_PC" ]; then
   if [ $ok = 1 ]; then note "OK le téléphone a joint le PC par Tailscale et lui a demandé la connexion (après $i s)"
   else fail "le téléphone n'a pas joint le PC par Tailscale"; fi
   wait_alive 5 "connexion par Tailscale"
+  clear_dialogs
   shot 10-tailnet-qr
   # The relay of this PC listens on 127.0.0.2:47989 (0200007F:BB75 in /proc).
   if adb shell cat /proc/net/tcp | grep -qi "0200007F:BB75 00000000:0000 0A"; then note "OK relais du PC sur 127.0.0.2"
@@ -298,6 +323,7 @@ adb shell "mkdir -p /data/data/$PKG/files && echo 'http://10.0.2.2:48300/latest'
 adb shell appops set $PKG REQUEST_INSTALL_PACKAGES allow > /dev/null 2>&1
 adb shell am force-stop "$PKG"
 sleep 1
+clear_dialogs
 launch
 ok=0
 for i in $(seq 1 90); do
@@ -307,6 +333,7 @@ done
 if [ $ok = 1 ]; then note "OK nouvelle version téléchargée, vérifiée et confiée à l'installateur (après $i s)"
 else fail "la mise à jour n'a pas été téléchargée"; fi
 sleep 3
+clear_dialogs
 shot 12-update-confirm
 for b in "=Update" "=Install" "=Mettre à jour" "=Installer"; do tap "$b" > /dev/null 2>&1 && break; done
 ok=0
